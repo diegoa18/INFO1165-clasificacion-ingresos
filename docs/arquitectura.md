@@ -310,9 +310,77 @@ Para cada $b = 1, \dots, B$ escribe `output/replicas/replica_XXX.rds` (`XXX` = `
 
 También escribe `logs/semillas.csv` (`b`, `semilla`, `n_estrella`, tamaños de los 4 destinos) y `logs/sesion.txt` (`sessionInfo()`, `RNGkind()`, `EPS`).
 
-### 07_grupos.R (lectura de las réplicas)
+### Nivel 4: reglas comunes a 06–09
 
-Lee cada `.rds`, agrega la columna `b` a `grupos_prueba` y apila las $B$ réplicas con `rbind`, lo que da $10B$ filas. Desde esa tabla resume `TPR`, `FPR` y `FNR` por `g` con `resumir()`, informando `n_1` y `n_0`.
+- Cada script hace `source()` de `00_utilidades.R`, `00_config.R` y de los módulos de nivel 2 que use (`03` para `log_densidad_normal()`, `04` para `indicadores()` y `resumir()`). No vuelve a ajustar modelos ni a particionar: solo lee `output/replicas/replica_XXX.rds` y `data/processed/tabla_analitica.rds`.
+- Lectura de réplicas: `lapply(sprintf("replica_%03d.rds", seq_len(B)), ...)` sobre `RUTAS[["replicas"]]`; falla con `stop()` si falta alguno de los `B` archivos. Los scripts de nivel 4 no se llaman entre sí, así que cada uno repite esta lectura.
+- Para cruzar con los predictores se une por `id_original` con la tabla analítica. Los índices de `particion[["indices"]]` son posiciones de fila de esa misma tabla.
+- Tablas: `write.csv(..., row.names = FALSE)` en `RUTAS[["tablas"]]`, con precisión completa (se redondea solo al presentar en el informe). Las tasas van como proporciones en $[0, 1]$ y Youden en su escala, de $-1$ a $1$. Un indicador no estimable queda como `NA`.
+- Figuras: gráficos de R base (`plot`, `hist`, `boxplot`, `qqnorm`, `segments`, `abline`), con `png(..., width = 1600, height = 1000, res = 150)` en `RUTAS[["figuras"]]`. Cada figura indica en el título o subtítulo la réplica o el resumen, el subconjunto (validación o prueba) y la escala.
+- Ninguna figura usa `jitter()` ni otra función que consuma el generador aleatorio. Si hace falta mostrar puntos superpuestos se usa transparencia con `rgb(..., alpha = )`.
+- Al final, cada script verifica con `stopifnot()` que escribió todos los archivos de su contrato.
+
+### 06_resumen.R (distribución de $\tau_b$ e indicadores de prueba)
+
+Lee: los $B$ `.rds` (`b`, `semilla`, `umbral[["tau"]]`, `indicadores_prueba`).
+
+| Archivo | Contenido |
+|---|---|
+| `tablas/replicas_indicadores.csv` | $B$ filas. Columnas `b`, `semilla`, `tau`, `exactitud`, `TPR`, `TNR`, `PPV`, `F1`, `FPR`, `FNR`, `BA`, `J` |
+| `tablas/resumen_replicas.csv` | 10 filas (`tau` y los 9 `INDICADORES`, en ese orden). Columnas `variable`, `escala` (`"original"` para `tau` y `J`, `"proporcion"` para el resto), `r`, `media`, `sd`, `mediana`, `p2.5`, `p97.5`, obtenidas con `resumir()` |
+| `figuras/hist_tau.png` | Histograma de los $\tau_b$ con líneas verticales en media, mediana, p2.5 y p97.5, y leyenda |
+| `figuras/paneles_indicadores.png` | Panel 2×4 de histogramas: `tau`, `exactitud`, `TPR`, `TNR`, `PPV`, `F1`, `BA`, `J`. Cada uno marca la mediana y el intervalo p2.5–p97.5, e indica `r` en el subtítulo |
+| `figuras/boxplot_indicadores.png` | Un boxplot por indicador en escala de proporción (`exactitud`, `TPR`, `TNR`, `PPV`, `F1`, `FPR`, `FNR`, `BA`), con eje $[0, 1]$. `J` queda fuera porque su escala es distinta y ya aparece en los paneles |
+
+Verificaciones: 200 filas con `b` = `1:B` y `semilla == semilla_replica(b)`; `resumen_replicas.csv` coincide con `resumir()` aplicado a cada columna de `replicas_indicadores.csv`; `p2.5 <= mediana <= p97.5`; `BA == (TPR + TNR)/2` y `J == TPR + TNR - 1` fila a fila, con tolerancia `EPS` multiplicado por un factor pequeño.
+
+### 07_grupos.R (errores por categoría conjunta)
+
+Lee: los $B$ `.rds` (`grupos_prueba`, `matriz_prueba`, `prueba`).
+
+Agrega la columna `b` a cada `grupos_prueba` y apila las $B$ réplicas con `rbind`, lo que da $10B$ filas.
+
+| Archivo | Contenido |
+|---|---|
+| `tablas/grupos_replicas.csv` | $10B$ filas: `b` más las columnas de `matrices_por_grupo()` |
+| `tablas/resumen_grupos.csv` | 30 filas (10 `g` × `TPR`, `FPR`, `FNR`). Columnas `g`, `indicador`, `denominador` (`"n_1"` para TPR y FNR, `"n_0"` para FPR), `den_min`, `den_mediana`, `den_max`, `r`, `mediana`, `p2.5`, `p97.5` (con `resumir()`) |
+| `tablas/grupos_replica1.csv` | Réplica 1: `g`, `n`, `n_1`, `n_0`, `prevalencia` ($n_1/n$), `TN`, `FP`, `FN`, `TP`, `TPR`, `FPR`, `FNR` |
+| `tablas/marginales_sexo_replica1.csv` | Réplica 1, 2 filas (`NIVELES_SEXO`). Se suman los conteos de las 5 categorías de cada sexo y después se calculan las tasas. Mismas columnas que `grupos_replica1.csv`, con `sexo` en lugar de `g` |
+| `tablas/marginales_raza_replica1.csv` | Igual, 5 filas (`NIVELES_RAZA`), con `raza` en lugar de `g` |
+| `figuras/tasas_grupos.png` | Tres paneles (`TPR`, `FPR`, `FNR`). En cada uno, una fila por `g` con un punto en la mediana y un segmento p2.5–p97.5 entre réplicas, eje $[0, 1]$, y la mediana de su denominador anotada junto a la etiqueta |
+
+Verificaciones: en cada réplica, la suma de `TN`, `FP`, `FN`, `TP` de las 10 filas es igual a `matriz_prueba`, y la suma de `n` es igual a `nrow(prueba)`. Las marginales por sexo y por raza suman la matriz global de la réplica 1. Los grupos sin positivos tienen `TPR` y `FNR` `NA` y no cuentan en `r`.
+
+### 08_diagnosticos.R (supuestos, verificaciones y trazabilidad)
+
+Lee: tabla analítica y los $B$ `.rds`. La réplica 1 se usa para los gráficos; las verificaciones recorren todas.
+
+| Archivo | Contenido |
+|---|---|
+| `figuras/qq_replica1.png` | Panel 2×2 con `qqnorm()` y `qqline()`: edad y horas × clase 0 y 1, del entrenamiento de la réplica 1. El título de cada panel indica la variable, la clase y $n$ |
+| `figuras/edad_horas_replica1.png` | Dos paneles (clase 0 y 1), dispersión de edad frente a horas en el entrenamiento de la réplica 1, con transparencia. El subtítulo indica la correlación de Pearson calculada a mano |
+| `tablas/educacion_g_replica1.csv` | Entrenamiento de la réplica 1 en formato largo: `clase`, `educacion`, `g`, `n` ($2 \times 8 \times 10 = 160$ filas, con ceros incluidos) |
+| `tablas/verificaciones_replicas.csv` | $B$ filas. Columnas `b`; `err_previa` ($\lvert\sum_c \hat\pi_c - 1\rvert$); `err_p_g_0`, `err_p_g_1` ($\lvert\sum_g \hat p_{c,g} - 1\rvert$); `err_q_e_0`, `err_q_e_1`; `n_estrella_ok`; `destinos_disjuntos`; `todos_con_destino`; `puntajes_finitos` (todos los `D` de prueba); `max_err_contribuciones` (máximo de $\lvert\sum \text{contribuciones} - D\rvert$); `matriz_suma_n` (la matriz de prueba suma `nrow(prueba)`); `grupos_suman_global` |
+| `tablas/trazabilidad.csv` | Pares `indicador`, `valor`: `filas_tabla_analitica`, `perfiles_distintos`, `duplicados_excedentes` (con las 15 columnas originales y sin `id_original`; un perfil repetido 3 veces aporta 2) y, para la réplica 1, `n_prueba`, `prueba_coincide_entrenamiento`, `prueba_coincide_validacion`, `prueba_coincide_alguno` |
+
+Verificaciones: todas las columnas lógicas de `verificaciones_replicas.csv` son `TRUE`; los errores de suma son menores que un múltiplo pequeño de `EPS`. Las diferencias observadas se guardan tal cual, porque la rúbrica pide registrarlas, no solo aprobarlas.
+
+### 09_replica1.R (evidencias de la réplica 1 para el informe)
+
+Lee: tabla analítica y `replica_001.rds`.
+
+| Archivo | Contenido |
+|---|---|
+| `tablas/tamanos_replica1.csv` | `particion[["tamanos"]]`: por clase `N`, `disp`, `val`, `pru`, `entrenamiento`, `sin_seleccionar`, más `n_estrella` |
+| `tablas/parametros_replica1.csv` | Por clase: `clase`, `n`, `previa`, `mu_edad`, `sigma_edad`, `mu_horas`, `sigma_horas` |
+| `tablas/densidad_ejemplo_replica1.csv` | Para la edad observada de la persona de `persona_replica1.csv` y cada clase: `clase`, `z`, `mu`, `sigma`, `log_f` (con `log_densidad_normal()`), `f` (`exp(log_f)`), `F` (`pnorm()`, solo para interpretar). Se verifica `log_f` contra `dnorm(log = TRUE)` |
+| `tablas/probabilidades_g_replica1.csv` | Formato largo: `clase`, `g`, `conteo` ($n_{c,g}$), `n_c`, `p` ($\hat p_{c,g}$). 20 filas |
+| `tablas/probabilidades_e_replica1.csv` | Igual para educación: `clase`, `educacion`, `conteo` ($m_{c,e}$), `n_c`, `q`. 16 filas |
+| `tablas/persona_replica1.csv` | Primera persona de prueba ordenada por `id_original`: `id_original`, `age`, `hours_per_week`, `educacion`, `g`, `clase`, `c_previa`, `c_edad`, `c_horas`, `c_educacion`, `c_g`, `D`, `tau`, `pred` |
+| `tablas/candidatos_replica1.csv` | `umbral[["candidatos"]]` más las columnas `exactitud`, `PPV`, `F1`, `FPR` obtenidas con `indicadores()` sobre sus conteos; se agregan `J_max`, `eps` y `elegido` (lógica) |
+| `figuras/curvas_validacion_replica1.png` | Panel izquierdo: `exactitud`, `TPR`, `TNR`, `PPV`, `F1` y `FPR` en validación frente a los cortes finitos, con una línea vertical en $\tau_1$ y leyenda. Panel derecho, aparte: los mismos indicadores en el corte $+\infty$ (puntos; `PPV` es `NA` allí y se indica) |
+
+Verificaciones: las previas suman 1 y las probabilidades de `g` y de educación suman 1 por clase; en `persona_replica1.csv`, la suma de las cinco contribuciones es igual a `D` y `pred == (D >= tau)`; `candidatos_replica1.csv` tiene un único `elegido` y su `tau` es igual a `umbral[["tau"]]`.
 
 ## 4. Decisiones tomadas
 
@@ -323,3 +391,4 @@ Lee cada `.rds`, agrega la columna `b` a `grupos_prueba` y apila las $B$ réplic
 - 2026-10-22: `PROPORCIONES`, `COLUMNAS_REQUERIDAS`, `ETIQUETAS_INGRESO` y `EDUCACION_NUM_MIN` quedan documentados en la tabla de `00_config.R`. La semilla de la réplica se obtiene solo con `semilla_replica(b)`, sin alias.
 - 2026-10-22: se crea `00_utilidades.R` en el nivel 0 con `media_manual()`, `sd_manual()` y `percentil_tipo7()`, porque `03` y `04` las necesitan y no pueden llamarse entre sí. `log_densidad_normal()` se queda en `03`.
 - 2026-10-22: `matrices_por_grupo()` devuelve formato largo con columna `g` (factor) y sin nombres de fila, para que `05` la guarde tal cual y `07` apile las réplicas con `rbind` agregando `b`.
+- 2026-10-22: contratos de 06–09 con nombres de archivo, columnas y figuras. Las evidencias que la rúbrica pide para la réplica 1 se reparten así: tamaños, parámetros, densidad, probabilidades, persona y curvas de validación en `09`; composición y marginales por grupo en `07`; Q–Q, dependencias, verificaciones y duplicados en `08`.
