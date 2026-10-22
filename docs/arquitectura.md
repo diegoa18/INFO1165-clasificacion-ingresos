@@ -152,6 +152,7 @@ $$
 ├── CLAUDE.md                 # contexto y reglas de trabajo
 ├── run_all.R                 # orquestador: solo source() en orden, sin lógica propia
 ├── R/
+│   ├── 00_utilidades.R       # nivel 0: media, sd y percentil tipo 7 a mano
 │   ├── 00_config.R           # nivel 0: constantes, rutas, niveles de factores
 │   ├── 01_datos.R            # nivel 1: lectura, limpieza, filtro, tabla analítica
 │   ├── 02_particion.R        # nivel 2: particionar()
@@ -180,20 +181,32 @@ $$
 
 | Nivel | Archivos | Puede usar | Efectos en disco |
 |---|---|---|---|
-| 0 | `00_config.R` | nada | ninguno |
+| 0 | `00_utilidades.R`, `00_config.R` | nada | ninguno |
 | 1 | `01_datos.R` | nivel 0 | lee `data/raw/`, escribe `data/processed/` |
 | 2 | `02_particion.R`, `03_modelo.R`, `04_umbral_metricas.R` | nivel 0 | ninguno (solo definen funciones) |
 | 3 | `05_replicas.R` | niveles 0–2 y `data/processed/` | escribe `output/replicas/` y `logs/` |
 | 4 | `06`–`09` | niveles 0–2, `data/processed/` y `output/replicas/` | escribe `output/tablas/` y `output/figuras/` |
 | — | `tests/test_NN_*.R` | niveles 0–2 y `data/processed/` | ninguno (no escribe en `output/`) |
 
-Un archivo solo depende de niveles inferiores. Los tres archivos de nivel 2 no se llaman entre sí: `04` recibe $D$ como vector numérico y no conoce el modelo. `05` es el único que combina partición, modelo y umbral. Los scripts de nivel 4 no vuelven a ajustar modelos: solo leen los `.rds`.
+Un archivo solo depende de niveles inferiores. Los dos archivos de nivel 0 no dependen de nada, ni entre sí: `00_utilidades.R` solo contiene funciones estadísticas puras y `00_config.R` solo constantes. `run_all.R` carga `00_utilidades.R` antes que `00_config.R`. Los tres archivos de nivel 2 no se llaman entre sí: `04` recibe $D$ como vector numérico y no conoce el modelo. `05` es el único que combina partición, modelo y umbral. Los scripts de nivel 4 no vuelven a ajustar modelos: solo leen los `.rds`.
 
-`tests/` queda fuera de la jerarquía: ningún archivo de `R/` lo usa y `run_all.R` no lo ejecuta. Lo corre el desarrollador al cerrar un módulo (`Rscript tests/test_02_particion.R` desde la raiz). Cada script hace `source()` de `00_config.R` y del módulo que prueba, puede leer `data/processed/` y falla con `stopifnot()` si una verificación no se cumple.
+`tests/` queda fuera de la jerarquía: ningún archivo de `R/` lo usa y `run_all.R` no lo ejecuta. Lo corre el desarrollador al cerrar un módulo (`Rscript tests/test_02_particion.R` desde la raiz). Cada script hace `source()` de `00_utilidades.R`, `00_config.R` y del módulo que prueba, puede leer `data/processed/` y falla con `stopifnot()` si una verificación no se cumple.
 
 ## 3. Contratos de funciones públicas
 
 Convenciones: la clase es `integer` con valores `0L`/`1L`; los índices son posiciones de fila en la tabla analítica (`integer`, ordenados de forma creciente); las matrices por clase tienen filas `"0"`, `"1"`.
+
+### 00_utilidades.R (funciones puras, sin dependencias)
+
+No usa ningún objeto de `00_config.R`. Cada función recibe vectores numéricos sin `NA` (quien llama filtra los `NA` antes) y no tiene efectos secundarios.
+
+`media_manual(x)`: `numeric` de longitud $n \ge 1$ $\to$ `numeric(1)`, $\sum x / n$.
+
+`sd_manual(x)`: `numeric` de longitud $n \ge 2$ $\to$ `numeric(1)`, con denominador $n - 1$; usa `media_manual()`.
+
+`percentil_tipo7(x, p)`: `numeric` de longitud $r \ge 1$, `numeric` con valores en $[0, 1]$ $\to$ `numeric` de la longitud de `p`. Ordena `x` y aplica $h = 1 + (r - 1)p$ con interpolación lineal (sección 1).
+
+`log_densidad_normal()` se queda en `03_modelo.R`: es un componente del modelo (el término numérico del puntaje), no un estadístico de resumen, y solo lo usan `03` y los scripts que evalúan el modelo. Las tres funciones de este archivo, en cambio, las necesitan a la vez la estimación (`03`) y los resúmenes (`04`).
 
 ### 00_config.R (objetos, sin funciones salvo una)
 
@@ -247,7 +260,7 @@ Al ejecutarse, el script escribe `tabla_analitica.rds`, `tabla_analitica.csv` y 
 
 ### 03_modelo.R
 
-`media_manual(x)`, `sd_manual(x)`: `numeric` $\to$ `numeric(1)`; la desviación usa denominador $n - 1$.
+Usa `media_manual()` y `sd_manual()` de `00_utilidades.R` para $\hat\mu_{c,j}$ y $\hat\sigma_{c,j}$.
 
 `log_densidad_normal(z, mu, sigma)`: `numeric` $\to$ `numeric` de la misma longitud que `z`.
 
@@ -279,9 +292,7 @@ Al ejecutarse, el script escribe `tabla_analitica.rds`, `tabla_analitica.csv` y 
 
 `matrices_por_grupo(clase, pred, g)`: $\to$ `data.frame` de 10 filas (una por `NIVELES_G`) con `n`, `n_1`, `n_0`, `TN`, `FP`, `FN`, `TP`, `TPR`, `FPR`, `FNR`.
 
-`percentil_tipo7(x, p)`: numeric sin `NA`, numeric $\to$ numeric de la longitud de `p`.
-
-`resumir(x)`: numeric (con posibles `NA`) $\to$ numeric con nombres `r`, `media`, `sd`, `mediana`, `p2.5`, `p97.5`; con $r = 1$ la `sd` es `NA` y con $r = 0$ todo es `NA` salvo `r`.
+`resumir(x)`: numeric (con posibles `NA`) $\to$ numeric con nombres `r`, `media`, `sd`, `mediana`, `p2.5`, `p97.5`; con $r = 1$ la `sd` es `NA` y con $r = 0$ todo es `NA` salvo `r`. Descarta los `NA` y usa `media_manual()`, `sd_manual()` y `percentil_tipo7()` de `00_utilidades.R` (la mediana es `percentil_tipo7(x, 0.5)`).
 
 ### 05_replicas.R (script, sin funciones públicas)
 
@@ -294,3 +305,4 @@ Escribe `output/replicas/replica_XXX.rds` con `list(b, semilla, particion, model
 - 2026-10-22: `DESTINOS` pasa de `02_particion.R` a `00_config.R`, porque lo usan también `05` y los scripts de nivel 4.
 - 2026-10-22: se agrega `tests/` con un script de verificación por módulo, fuera de la jerarquía y de `run_all.R`.
 - 2026-10-22: `PROPORCIONES`, `COLUMNAS_REQUERIDAS`, `ETIQUETAS_INGRESO` y `EDUCACION_NUM_MIN` quedan documentados en la tabla de `00_config.R`. La semilla de la réplica se obtiene solo con `semilla_replica(b)`, sin alias.
+- 2026-10-22: se crea `00_utilidades.R` en el nivel 0 con `media_manual()`, `sd_manual()` y `percentil_tipo7()`, porque `03` y `04` las necesitan y no pueden llamarse entre sí. `log_densidad_normal()` se queda en `03`.
