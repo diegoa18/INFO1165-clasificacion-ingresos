@@ -12,14 +12,6 @@ faltan <- archivos[!file.exists(archivos)]
 if (length(faltan) > 0L) stop("Faltan ", length(faltan), " replicas, p. ej. ", faltan[1L])
 replicas <- lapply(archivos, readRDS)
 
-# write.csv con precision completa: los numericos se escriben con 17 cifras significativas.
-escribir_csv <- function(df, archivo) {
-  num <- vapply(df, is.double, logical(1))
-  df[num] <- lapply(df[num], function(x) ifelse(is.na(x), NA, sprintf("%.17g", x)))
-  write.csv(df, file.path(RUTAS[["tablas"]], archivo), row.names = FALSE,
-            quote = which(!num & !vapply(df, is.integer, logical(1))), na = "NA")
-}
-
 # --- Tabla por replica --------------------------------------------------------
 por_replica <- do.call(rbind, lapply(replicas, function(r) {
   data.frame(b = r[["b"]], semilla = r[["semilla"]], tau = r[["umbral"]][["tau"]],
@@ -40,8 +32,8 @@ resumen$r <- as.integer(resumen$r)
 
 dir.create(RUTAS[["tablas"]], showWarnings = FALSE, recursive = TRUE)
 dir.create(RUTAS[["figuras"]], showWarnings = FALSE, recursive = TRUE)
-escribir_csv(por_replica, "replicas_indicadores.csv")
-escribir_csv(resumen, "resumen_replicas.csv")
+escribir_csv(por_replica, file.path(RUTAS[["tablas"]], "replicas_indicadores.csv"))
+escribir_csv(resumen, file.path(RUTAS[["tablas"]], "resumen_replicas.csv"))
 
 # --- Figuras ------------------------------------------------------------------
 abrir_png <- function(archivo) {
