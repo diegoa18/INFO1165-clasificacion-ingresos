@@ -1,0 +1,42 @@
+# R / RStudio
+.Rhistory
+.RData
+.Ruserdata
+.Rapp.history
+.Rproj.user/
+*_cache/
+*_files/
+*.knit.md
+*.utf8.md
+
+# Salidas regenerables (se conserva solo .gitkeep)
+output/replicas/*
+!output/replicas/.gitkeep
+output/tablas/*
+!output/tablas/.gitkeep
+output/figuras/*
+!output/figuras/.gitkeep
+
+# Datos (se regeneran con R/01_datos.R)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+
+# Logs (quitar estas lineas si se piden versionar para la entrega)
+logs/*
+!logs/.gitkeep
+
+# Sistema operativo / editores
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*~
+
+# Entorno local
+.Renviron
+.env
+*.log
