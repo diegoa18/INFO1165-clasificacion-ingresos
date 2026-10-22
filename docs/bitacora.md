@@ -31,11 +31,11 @@ Se completa una sección al cerrar el PR de cada módulo. Los contratos de refer
 
 ## 02_particion.R
 
-- **Estado:** pendiente
-- **Implementado:**
-- **Funciones expuestas:**
-- **Verificaciones:**
-- **Dudas abiertas:**
+- **Estado:** implementado (rama `feat/01-datos`, 2026-10-22)
+- **Implementado:** partición estratificada por clase (⌊0,8·N_c⌋ disponibles, ⌊0,1·N_c⌋ validación, resto prueba), `n*` = mínimo de disponibles, entrenamiento balanceado por sorteo sin reemplazo y cuarto destino `sin_seleccionar`. `set.seed(semilla)` dentro de la función (con `kind` explícito Mersenne-Twister / Inversion / Rejection), orden de consumo del contrato y siempre `x[sample.int(length(x), n)]`. No lee ni escribe archivos. Constante local `DESTINOS` con los 4 nombres.
+- **Funciones expuestas:** `particionar(clase, semilla)` → `list(semilla, n_estrella, tamanos, indices, destino)`; `indices` = posiciones de fila (integer, crecientes) en la tabla analítica.
+- **Verificaciones:** script aparte (no versionado) con la tabla analítica y `semilla_replica(1)`: destinos disjuntos con unión = 28 308, `n* = 6077` (= ⌊0,8 · 7 597⌋), entrenamiento 6 077 / 6 077, prevalencia de validación 0,26820 y de prueba 0,26862 frente a 0,26837 en la tabla (diferencia ≤ 1/n del destino), misma semilla ⇒ resultado idéntico, semilla 2 ⇒ índices distintos en entrenamiento, validación y prueba. Tamaños b = 1: clase 0 → 6 077 / 2 071 / 2 072 / 10 491; clase 1 → 6 077 / 759 / 761 / 0.
+- **Dudas abiertas:** el contrato usa `particionar(clase, semilla)` con índices como posiciones de fila y el destino `sin_seleccionar`; se siguió el contrato en vez de `particionar(datos, semilla)` con `id_original` y `no_usados` (conversión: `tabla$id_original[idx]`). Propuesta: mover `DESTINOS` a `00_config.R` y decidir si el script de verificación se versiona (p. ej. en `tests/`).
 
 ## 03_modelo.R
 
