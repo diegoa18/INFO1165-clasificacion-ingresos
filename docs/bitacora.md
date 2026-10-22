@@ -23,11 +23,11 @@ Se completa una sección al cerrar el PR de cada módulo. Los contratos de refer
 
 ## 01_datos.R
 
-- **Estado:** pendiente
-- **Implementado:**
-- **Funciones expuestas:**
-- **Verificaciones:**
-- **Dudas abiertas:**
+- **Estado:** en curso (rama `feat/01-datos`, apilada sobre `feat/00-config`; PR pendiente, 2026-10-22)
+- **Implementado:** lectura de `adult.data` con `read.csv` (sin encabezado, `strip.white = TRUE`, `"?"` y `""` como `NA`), `id_original` = número de fila en el archivo, exclusión por faltantes solo en `COLUMNAS_REQUERIDAS`, filtro `education_num >= 9`, `clase` 0/1, `educacion` (factor `NIVELES_E`) y `g` (factor `NIVELES_G`). Escribe `tabla_analitica.rds`, `tabla_analitica.csv` (28 308 × 19) y `registro_exclusiones.csv`.
+- **Funciones expuestas:** `leer_adult(ruta)`, `construir_tabla_analitica(crudo)` → `list(tabla, registro)`.
+- **Verificaciones:** `stopifnot` sobre columnas y orden, ausencia de `"?"`/`""` tras la lectura, sin `NA` en requeridas, `min(education_num) >= 9`, `id_original` único y creciente, `clase` integer 0/1, niveles exactos de `educacion` y `g` sin `NA`, correspondencia `education_num` ↔ `educacion`, consistencia del registro. Resultado: 32 561 originales, 0 excluidas por faltantes, 4 253 por educación, 28 308 finales; `clase`: 20 711 (0) / 7 597 (1); los 10 niveles de G tienen casos (mínimo Female/Other = 76). MD5 de los crudos: `adult.data` 5d7c39d7b8804f071cdd1f2a7c460872, `adult.names` 1a7cdb3ff7a1b709968b1c7a11def63e.
+- **Dudas abiertas:** los faltantes de `adult.data` están solo en `workclass` (1 408), `occupation` (1 411) y `native_country` (499) dentro de la tabla final, por eso ninguna fila se excluye por faltantes. El script no descarga los datos: si faltan, `leer_adult()` se detiene con un mensaje (se descargaron a mano desde UCI).
 
 ## 02_particion.R
 
