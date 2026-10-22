@@ -39,11 +39,11 @@ Se completa una sección al cerrar cada módulo (commit en la rama de trabajo). 
 
 ## 03_modelo.R
 
-- **Estado:** pendiente
-- **Implementado:**
-- **Funciones expuestas:**
-- **Verificaciones:**
-- **Dudas abiertas:**
+- **Estado:** cerrado (2026-10-22)
+- **Implementado:** Naive Bayes mixto a mano: media y desviación estándar (denominador n − 1) de `age` y `hours_per_week` por clase, log-densidad normal en escala logarítmica, probabilidades de `educacion` y `g` con Laplace (`ALPHA`) sobre los niveles fijos (los niveles con 0 casos reciben α/(n_c + α·K)), previa estimada como n_c / (n_0 + n_1). Puntaje ℓ_c = log π_c + log f_edad + log f_horas + log q_e + log p_g; `D = l1 - l0`. Sin `mean`/`sd`/`dnorm`; no lee ni escribe archivos ni llama a 02/04.
+- **Funciones expuestas:** `media_manual(x)`, `sd_manual(x)`, `log_densidad_normal(z, mu, sigma)`, `ajustar_nb(entrenamiento)` → `list(n, previa, mu, sigma, conteos_g, p_g, conteos_e, q_e)`, `puntuar(modelo, datos)` → `data.frame(l0, l1, c_previa, c_edad, c_horas, c_educacion, c_g, D)`.
+- **Verificaciones:** `Rscript tests/test_03_modelo.R` (OK) con la réplica 1. Estructura del contrato; diferencia máxima frente a R base: `mean` 0, `sd` 1,8·10⁻¹⁵, `dnorm(log = TRUE)` 3,6·10⁻¹⁵ (tolerancia EPS·n·escala); `p_g` y `q_e` suman 1 por clase y siguen la fórmula exacta; previa = 0,5 con n = 6 077 por clase y `c_previa = 0`; `D == l1 - l0` y |Σ contribuciones − D| dentro de tolerancia; puntajes finitos. Casos límite: nivel sin casos → α/(n_c + α·K); `stop()` con una clase de 1 persona y con σ = 0. Réplica 1: μ edad 36,88 / 44,14, μ horas 39,37 / 45,41, σ edad 13,35 / 10,50, σ horas 12,10 / 11,00 (clase 0 / 1). D en validación (n = 2 830): mín −5,93, mediana −0,37, máx 3,86; con corte 0, 592 de 759 positivos y 1 487 de 2 071 negativos quedan del lado correcto.
+- **Dudas abiertas:** ninguna.
 
 ## 04_umbral_metricas.R
 
