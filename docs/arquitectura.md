@@ -290,13 +290,29 @@ Usa `media_manual()` y `sd_manual()` de `00_utilidades.R` para $\hat\mu_{c,j}$ y
 `elegir_umbral(D, clase, eps = EPS)`
 - Salida: `list(tau, J_max, eps, candidatos)`, con `candidatos` un `data.frame(tau, TN, FP, FN, TP, TPR, TNR, J, empatado)` que incluye todos los cortes evaluados.
 
-`matrices_por_grupo(clase, pred, g)`: $\to$ `data.frame` de 10 filas (una por `NIVELES_G`) con `n`, `n_1`, `n_0`, `TN`, `FP`, `FN`, `TP`, `TPR`, `FPR`, `FNR`.
+`matrices_por_grupo(clase, pred, g)`: integer, integer, factor (`levels = NIVELES_G`) $\to$ `data.frame` en formato largo de 10 filas, una por nivel y en el orden de `NIVELES_G`, sin nombres de fila (`row.names` por defecto `1:10`). Columnas, en este orden: `g` (factor, `levels = NIVELES_G`), `TN`, `FP`, `FN`, `TP` (integer), `n`, `n_1`, `n_0` (integer, con $n_1 = TP + FN$ y $n_0 = TN + FP$) y `TPR`, `FPR`, `FNR` (numeric, `NA` si el denominador es cero). Un grupo sin personas aparece igual, con conteos 0 y tasas `NA`.
 
 `resumir(x)`: numeric (con posibles `NA`) $\to$ numeric con nombres `r`, `media`, `sd`, `mediana`, `p2.5`, `p97.5`; con $r = 1$ la `sd` es `NA` y con $r = 0$ todo es `NA` salvo `r`. Descarta los `NA` y usa `media_manual()`, `sd_manual()` y `percentil_tipo7()` de `00_utilidades.R` (la mediana es `percentil_tipo7(x, 0.5)`).
 
 ### 05_replicas.R (script, sin funciones públicas)
 
-Escribe `output/replicas/replica_XXX.rds` con `list(b, semilla, particion, modelo, umbral, prueba, matriz_prueba, indicadores_prueba, grupos_prueba)`, donde `prueba` es un `data.frame` con `id_original`, `clase`, `g`, las contribuciones, `D` y `pred`. También escribe `logs/semillas.csv` y `logs/sesion.txt`.
+Para cada $b = 1, \dots, B$ escribe `output/replicas/replica_XXX.rds` (`XXX` = `b` con tres dígitos) con
+
+`list(b, semilla, particion, modelo, umbral, prueba, matriz_prueba, indicadores_prueba, grupos_prueba)`
+
+- `b` (integer) y `semilla` (integer, `semilla_replica(b)`).
+- `particion`: salida de `particionar()`.
+- `modelo`: salida de `ajustar_nb()`.
+- `umbral`: salida de `elegir_umbral()` sobre validación.
+- `prueba`: `data.frame` con `id_original`, `clase`, `g`, `c_previa`, `c_edad`, `c_horas`, `c_educacion`, `c_g`, `D` y `pred`.
+- `matriz_prueba`: salida de `matriz_confusion()`; `indicadores_prueba`: salida de `indicadores()`.
+- `grupos_prueba`: salida de `matrices_por_grupo()` tal cual, sin columna `b`.
+
+También escribe `logs/semillas.csv` (`b`, `semilla`, `n_estrella`, tamaños de los 4 destinos) y `logs/sesion.txt` (`sessionInfo()`, `RNGkind()`, `EPS`).
+
+### 07_grupos.R (lectura de las réplicas)
+
+Lee cada `.rds`, agrega la columna `b` a `grupos_prueba` y apila las $B$ réplicas con `rbind`, lo que da $10B$ filas. Desde esa tabla resume `TPR`, `FPR` y `FNR` por `g` con `resumir()`, informando `n_1` y `n_0`.
 
 ## 4. Decisiones tomadas
 
@@ -306,3 +322,4 @@ Escribe `output/replicas/replica_XXX.rds` con `list(b, semilla, particion, model
 - 2026-10-22: se agrega `tests/` con un script de verificación por módulo, fuera de la jerarquía y de `run_all.R`.
 - 2026-10-22: `PROPORCIONES`, `COLUMNAS_REQUERIDAS`, `ETIQUETAS_INGRESO` y `EDUCACION_NUM_MIN` quedan documentados en la tabla de `00_config.R`. La semilla de la réplica se obtiene solo con `semilla_replica(b)`, sin alias.
 - 2026-10-22: se crea `00_utilidades.R` en el nivel 0 con `media_manual()`, `sd_manual()` y `percentil_tipo7()`, porque `03` y `04` las necesitan y no pueden llamarse entre sí. `log_densidad_normal()` se queda en `03`.
+- 2026-10-22: `matrices_por_grupo()` devuelve formato largo con columna `g` (factor) y sin nombres de fila, para que `05` la guarde tal cual y `07` apile las réplicas con `rbind` agregando `b`.
