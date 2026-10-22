@@ -63,11 +63,11 @@ Se completa una sección al cerrar cada módulo (commit en la rama de trabajo). 
 
 ## 05_replicas.R
 
-- **Estado:** pendiente
-- **Implementado:**
-- **Funciones expuestas:**
-- **Verificaciones:**
-- **Dudas abiertas:**
+- **Estado:** cerrado (2026-10-22)
+- **Implementado:** bucle b = 1..`B_EJECUCION` (por defecto `B`; se puede fijar antes de `source()` para pruebas sin tocar `00_config.R`): `semilla_replica(b)` → `particionar()` → `ajustar_nb()` en entrenamiento → `elegir_umbral()` con D de validación → `puntuar()`, `predecir()`, `matriz_confusion()`, `indicadores()` y `matrices_por_grupo()` en prueba. Guarda `output/replicas/replica_XXX.rds` con `list(b, semilla, particion, modelo, umbral, prueba, matriz_prueba, indicadores_prueba, grupos_prueba)`, `logs/semillas.csv` (b, semilla, n_estrella y tamaños de los 4 destinos) y `logs/sesion.txt` (`sessionInfo()`, `RNGkind()`, `EPS`, `B_EJECUCION`).
+- **Funciones expuestas:** ninguna (script).
+- **Verificaciones:** prueba con `B_EJECUCION = 2` (1,2 s), luego las 200 réplicas: **88,9 s** (≈ 0,44 s por réplica), 200 archivos, 33,9 MB. `Rscript tests/test_05_replicas.R` (OK, 3,3 s): existen exactamente los 200 `.rds` y `semillas.csv` con 200 filas; en cada réplica la semilla es `semilla_replica(b)`, los destinos son disjuntos con unión = 28 308, cada clase tiene n_estrella = 6 077 en entrenamiento, `prueba` coincide con la partición y `pred`/`matriz_prueba` son coherentes con τ_b; las réplicas 1, 100 y 200 recalculadas desde cero son `identical()` a su `.rds`; τ₁ = 0,0991012 como en 04. τ_b en las 200 réplicas: mínimo −0,3231, máximo 0,3195, 200 valores distintos.
+- **Dudas abiertas:** ninguna. Si se corre con `B_EJECUCION < B` después de una corrida completa, quedan `.rds` de corridas anteriores; `test_05_replicas.R` exige exactamente `B`.
 
 ## 06_resumen.R
 
