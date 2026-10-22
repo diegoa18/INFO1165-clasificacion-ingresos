@@ -3,8 +3,6 @@
 
 if (!exists("RUTAS")) source(file.path("R", "00_config.R"))
 
-DESTINOS <- c("entrenamiento", "validacion", "prueba", "sin_seleccionar")
-
 # Particion estratificada por clase con entrenamiento balanceado (n* por clase).
 # Indices = posiciones de fila en la tabla analitica (integer, crecientes).
 # Orden de consumo del generador: permutacion de c = 0 y luego c = 1;

@@ -17,7 +17,6 @@ SEMILLA_BASE <- 20261021L
 
 # Semilla de la replica b: SEMILLA_BASE + b - 1.
 semilla_replica <- function(b) SEMILLA_BASE + b - 1L
-semilla <- semilla_replica
 
 # --- Parametros numericos -----------------------------------------------------
 ALPHA         <- 1
@@ -70,6 +69,9 @@ K_G <- length(NIVELES_G)
 # --- Indicadores --------------------------------------------------------------
 INDICADORES <- c("exactitud", "TPR", "TNR", "PPV", "F1", "FPR", "FNR", "BA", "J")
 
+# --- Destinos de la particion -------------------------------------------------
+DESTINOS <- c("entrenamiento", "validacion", "prueba", "sin_seleccionar")
+
 # --- Verificaciones -----------------------------------------------------------
 stopifnot(
   is.integer(B), B == 200L,
@@ -77,7 +79,6 @@ stopifnot(
   semilla_replica(1L) == 20261021L,
   semilla_replica(B) == 20261220L,
   is.integer(semilla_replica(1L)),
-  identical(semilla, semilla_replica),
   ALPHA == 1,
   EPS == 2^-52,
   abs(sum(PROPORCIONES) - 1) <= EPS,
@@ -91,5 +92,6 @@ stopifnot(
   identical(NIVELES_G[c(1L, 5L, 6L, 10L)],
             c("Female/White", "Female/Other", "Male/White", "Male/Other")),
   length(INDICADORES) == 9L,
+  identical(DESTINOS, c("entrenamiento", "validacion", "prueba", "sin_seleccionar")),
   setequal(names(RUTAS), c("raw", "processed", "replicas", "tablas", "figuras", "logs"))
 )
