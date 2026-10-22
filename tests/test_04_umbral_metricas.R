@@ -100,14 +100,31 @@ stopifnot(
 # --- Juguete 8: por grupo y resumir ---------------------------------------------
 g8  <- factor(c("Female/White", "Female/White", "Male/White", "Male/White", "Male/Black"),
               levels = NIVELES_G)
-mg8 <- matrices_por_grupo(c(0L, 1L, 1L, 0L, 1L), c(0L, 1L, 0L, 1L, 1L), g8)
+cl8 <- c(0L, 1L, 1L, 0L, 1L); pr8 <- c(0L, 1L, 0L, 1L, 1L)
+mg8 <- matrices_por_grupo(cl8, pr8, g8)
+fila <- function(nivel) mg8[mg8$g == nivel, ]
 stopifnot(
-  nrow(mg8) == 10L, identical(rownames(mg8), NIVELES_G),
-  identical(names(mg8), c("n", "n_1", "n_0", "TN", "FP", "FN", "TP", "TPR", "FPR", "FNR")),
-  mg8["Female/White", "TPR"] == 1, mg8["Female/White", "FPR"] == 0,
-  mg8["Male/White", "FNR"] == 1, mg8["Male/White", "FPR"] == 1,
-  is.na(mg8["Male/Black", "FPR"]),                        # sin negativos reales
-  mg8["Female/Black", "n"] == 0L, all(is.na(mg8["Female/Black", c("TPR", "FPR", "FNR")]))
+  # estructura del contrato (formato largo)
+  is.data.frame(mg8), nrow(mg8) == 10L,
+  identical(names(mg8), c("g", "TN", "FP", "FN", "TP", "n", "n_1", "n_0", "TPR", "FPR", "FNR")),
+  is.factor(mg8$g), identical(levels(mg8$g), NIVELES_G),
+  identical(as.character(mg8$g), NIVELES_G),               # orden de NIVELES_G
+  identical(rownames(mg8), as.character(1:10)),            # sin nombres de fila
+  all(vapply(mg8[c("TN", "FP", "FN", "TP", "n", "n_1", "n_0")], is.integer, logical(1))),
+  all(vapply(mg8[c("TPR", "FPR", "FNR")], is.double, logical(1))),
+  all(mg8$n_1 == mg8$TP + mg8$FN), all(mg8$n_0 == mg8$TN + mg8$FP), all(mg8$n == mg8$n_1 + mg8$n_0),
+  # suma de M_g = M
+  identical(c(TN = sum(mg8$TN), FP = sum(mg8$FP), FN = sum(mg8$FN), TP = sum(mg8$TP)),
+            matriz_confusion(cl8, pr8)),
+  # valores a mano
+  fila("Female/White")$TPR == 1, fila("Female/White")$FPR == 0,
+  fila("Male/White")$FNR == 1, fila("Male/White")$FPR == 1,
+  is.na(fila("Male/Black")$FPR),                           # sin negativos reales
+  fila("Female/Black")$n == 0L,                            # grupo sin personas: conteos 0, tasas NA
+  all(fila("Female/Black")[c("TN", "FP", "FN", "TP")] == 0L),
+  all(is.na(fila("Female/Black")[c("TPR", "FPR", "FNR")])),
+  # rbind de dos replicas con columna b (uso de 07)
+  nrow(rbind(cbind(b = 1L, mg8), cbind(b = 2L, mg8))) == 20L
 )
 
 r_n <- resumir(c(1, 2, 3, NA, 4, 10))
@@ -146,7 +163,7 @@ print(cand[cand$empatado, ], row.names = FALSE)
 
 cat("\n== Matriz de confusion en prueba (n =", length(pred), ") ==\n"); print(m_pru)
 cat("\n== Indicadores en prueba ==\n"); print(round(i_pru, 4))
-cat("\n== Por categoria conjunta (prueba) ==\n"); print(cbind(grupos[, 1:7], round(grupos[, 8:10], 4)))
+cat("\n== Por categoria conjunta (prueba) ==\n"); print(cbind(grupos[, 1:8], round(grupos[, 9:11], 4)))
 
 stopifnot(
   nrow(cand) == length(unique(D_val)) + 1L,
@@ -159,9 +176,10 @@ stopifnot(
   m_pru[["TP"]] + m_pru[["FN"]] == sum(pru$clase == 1L),
   m_pru[["TN"]] + m_pru[["FP"]] == sum(pru$clase == 0L),
   identidades(i_pru), !anyNA(i_pru),
-  # suma de M_g = M
-  sum(grupos$TN) == m_pru[["TN"]], sum(grupos$FP) == m_pru[["FP"]],
-  sum(grupos$FN) == m_pru[["FN"]], sum(grupos$TP) == m_pru[["TP"]],
+  # por grupo: 10 filas, niveles exactos y suma de M_g = M
+  nrow(grupos) == 10L, identical(levels(grupos$g), NIVELES_G),
+  identical(c(TN = sum(grupos$TN), FP = sum(grupos$FP), FN = sum(grupos$FN), TP = sum(grupos$TP)),
+            m_pru),
   sum(grupos$n) == nrow(pru)
 )
 

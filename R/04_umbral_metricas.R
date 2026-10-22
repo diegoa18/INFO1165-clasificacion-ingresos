@@ -79,22 +79,27 @@ elegir_umbral <- function(D, clase, eps = EPS) {
 
 # --- Por categoria conjunta ---------------------------------------------------
 
-# Una fila por NIVELES_G (row.names); tasas NA si el denominador es 0.
+# Formato largo: una fila por nivel de NIVELES_G, en ese orden, sin nombres de fila.
+# Un grupo sin personas aparece con conteos 0 y tasas NA.
 matrices_por_grupo <- function(clase, pred, g) {
   stopifnot(length(clase) == length(pred), length(g) == length(clase),
-            identical(levels(g), NIVELES_G))
-  filas <- lapply(NIVELES_G, function(lv) {
+            is.factor(g), identical(levels(g), NIVELES_G))
+  m <- t(vapply(NIVELES_G, function(lv) {
     en <- !is.na(g) & g == lv
-    m  <- matriz_confusion(clase[en], pred[en])
-    data.frame(n = sum(en), n_1 = m[["TP"]] + m[["FN"]], n_0 = m[["TN"]] + m[["FP"]],
-               TN = m[["TN"]], FP = m[["FP"]], FN = m[["FN"]], TP = m[["TP"]],
-               TPR = cociente(m[["TP"]], m[["TP"]] + m[["FN"]]),
-               FPR = cociente(m[["FP"]], m[["TN"]] + m[["FP"]]),
-               FNR = cociente(m[["FN"]], m[["TP"]] + m[["FN"]]))
-  })
-  out <- do.call(rbind, filas)
-  rownames(out) <- NIVELES_G
-  out
+    matriz_confusion(clase[en], pred[en])
+  }, integer(4L)))
+  TN <- unname(m[, "TN"]); FP <- unname(m[, "FP"])
+  FN <- unname(m[, "FN"]); TP <- unname(m[, "TP"])
+  n_1 <- TP + FN
+  n_0 <- TN + FP
+  data.frame(
+    g   = factor(NIVELES_G, levels = NIVELES_G),
+    TN  = TN, FP = FP, FN = FN, TP = TP,
+    n   = n_1 + n_0, n_1 = n_1, n_0 = n_0,
+    TPR = mapply(cociente, TP, n_1),
+    FPR = mapply(cociente, FP, n_0),
+    FNR = mapply(cociente, FN, n_1)
+  )
 }
 
 # --- Resumen entre replicas ---------------------------------------------------
