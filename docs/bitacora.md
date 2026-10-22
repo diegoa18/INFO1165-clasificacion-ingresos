@@ -91,11 +91,16 @@ Se completa una sección al cerrar cada módulo (commit en la rama de trabajo). 
 
 ## 08_diagnosticos.R
 
-- **Estado:** pendiente
-- **Implementado:**
-- **Funciones expuestas:**
-- **Verificaciones:**
-- **Dudas abiertas:**
+- **Estado:** cerrado (2026-10-22)
+- **Implementado:** lee la tabla analítica y los `B` `.rds` (regla común). Réplica 1, entrenamiento: `figuras/qq_replica1.png` (2×2 `qqnorm`/`qqline`, edad y horas × clase, n en el título), `figuras/edad_horas_replica1.png` (dispersión por clase con transparencia, ejes comunes, Pearson a mano en el subtítulo), `tablas/educacion_g_replica1.csv` (160 filas en orden clase → educación → g, con ceros). Todas las réplicas: `tablas/verificaciones_replicas.csv` (200 filas, columnas del contrato). `tablas/trazabilidad.csv` (perfil = 15 columnas originales sin `id_original`, `NA` cuenta como valor). Tarda ~7 s.
+- **Funciones expuestas:** ninguna (script). Auxiliares internas: `abrir_png()`, `pearson_manual()` (usa `media_manual`/`sd_manual`), `clave_perfil()`.
+- **Verificaciones:** `stopifnot` en el script (160 filas que suman el entrenamiento, 200 filas, todas las columnas lógicas `TRUE`, archivos escritos). `Rscript tests/test_08_diagnosticos.R` (OK): columnas y orden del contrato; las 6 columnas lógicas son `TRUE` en las 200 réplicas; errores de suma de probabilidades < 16·EPS (máximo 1,1·10⁻¹⁶) y `max_err_contribuciones` < 128·EPS (máximo 9,1·10⁻¹⁵ = 41·EPS; el error nace al restar l₁ − l₀ con |ℓ_c| ≈ 12–20, y ℓ_c no se guarda en `prueba`); contraste independiente con los `.rds` de las réplicas 1, 100 y 200; `educacion_g` marginaliza exactamente a `conteos_g` y `conteos_e` del modelo de la réplica 1; `duplicados_excedentes` coincide con `sum(duplicated())` y `perfiles_distintos` con `nrow(unique())`; existen los 2 png.
+- **Hallazgos:**
+  - **Q–Q (réplica 1):** la edad no es normal: en clase 0 hay un piso en 17–20 años y cola superior larga (asimetría a la derecha); en clase 1 se ajusta bien en el centro, con cola inferior más corta. Las horas se alejan mucho de la normal: valores discretos con gran masa en 40 (en clase 0 el rango intercuartílico es casi nulo y `qqline` queda casi plana) y topes en 1 y 99. El supuesto gaussiano es aproximado para edad y débil para horas.
+  - **Dependencias:** Pearson edad–horas = 0,024 (clase 0) y −0,122 (clase 1): dependencia lineal débil dentro de cada clase, compatible con el supuesto de independencia condicional de Naive Bayes en ese par. `educacion_g_replica1.csv`: 32 de 160 celdas en cero, concentradas en grupos pequeños con educación alta (p. ej. Prof-school y Doctorate en clase 0); la tabla queda para evaluar la independencia educación–g por clase en el informe.
+  - **Duplicados:** 28 308 filas, 28 289 perfiles distintos, 19 duplicados excedentes. En la réplica 1, 3 personas de prueba tienen un perfil idéntico a alguien de entrenamiento, 1 a alguien de validación, 4 en total (0,14 % de 2 833).
+  - **Verificaciones en las 200 réplicas:** previas y probabilidades de g y educación suman 1 (error ≤ 1,1·10⁻¹⁶), n* correcto, destinos disjuntos y completos, puntajes finitos, contribuciones suman D, la matriz de prueba suma n y los grupos suman la matriz global.
+- **Dudas abiertas:** dos interpretaciones del contrato: `prueba_coincide_*` cuenta personas de prueba (no perfiles distintos) cuyo perfil aparece en entrenamiento, validación o alguno; el orden de `educacion_g_replica1.csv` sigue 2 × 8 × 10 (clase, educación, g). Propuesta: fijar en `arquitectura.md` una tolerancia explícita para `max_err_contribuciones` (p. ej. 128·EPS) en lugar de "un múltiplo pequeño de EPS".
 
 ## 09_replica1.R
 
