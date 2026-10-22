@@ -55,11 +55,11 @@ Se completa una sección al cerrar cada módulo (commit en la rama de trabajo). 
 
 ## 04_umbral_metricas.R
 
-- **Estado:** pendiente
-- **Implementado:**
-- **Funciones expuestas:**
-- **Verificaciones:**
-- **Dudas abiertas:**
+- **Estado:** cerrado (2026-10-22)
+- **Implementado:** candidatos {u₁} ∪ puntos medios u_h/2 + u_{h+1}/2 ∪ {+∞} (si un punto medio redondea fuera de (u_h, u_{h+1}] se usa u_{h+1}); regla positivo si D ≥ τ; matriz (TN, FP, FN, TP); 9 indicadores con `NA` si el denominador es 0; τ que maximiza J en validación con empate |J − J_max| ≤ eps, desempate por menor |τ| y luego menor τ; matrices por categoría conjunta; resumen entre réplicas con `media_manual`, `sd_manual` y `percentil_tipo7` de `00_utilidades.R`. Recibe D y la clase como argumentos; no llama a 03 ni lee/escribe archivos.
+- **Funciones expuestas:** `candidatos_umbral(D)`, `predecir(D, tau)`, `matriz_confusion(clase, pred)`, `indicadores(m)`, `elegir_umbral(D, clase, eps = EPS)` → `list(tau, J_max, eps, candidatos)`, `matrices_por_grupo(clase, pred, g)` (10 filas, `row.names = NIVELES_G`), `resumir(x)`. Auxiliar interna: `cociente(num, den)`.
+- **Verificaciones:** `Rscript tests/test_04_umbral_metricas.R` (OK). Juguetes a mano: candidatos y J de 5 puntos (τ = −0,5, J = 2/3); empate con igual |τ| → menor τ; empate a tres → menor |τ|; `eps` controla el empate; L = 1 → {u₁, +∞}; punto medio no representable entre 1 y 1 + EPS → se usa u_{h+1}; matriz e indicadores de 100 casos; denominador 0 → `NA` (y matriz vacía → todo `NA`); grupo sin casos → tasas `NA`; `resumir` con `NA`, r = 1 (sd `NA`) y r = 0. Réplica 1 completa: 1 856 candidatos (1 855 valores distintos de D), un solo empatado, **τ₁ = 0,0991012**, **J_max = 0,5056** en validación. Prueba (n = 2 833): TN 1 552, FP 520, FN 186, TP 575; exactitud 0,7508, TPR 0,7556, TNR 0,7490, PPV 0,5251, F1 0,6196, FPR 0,2510, FNR 0,2444, BA 0,7523, J 0,5046. Identidades TPR + FNR = 1, TNR + FPR = 1, BA = (TPR + TNR)/2, J = TPR + TNR − 1 y Σ_g M_g = M se cumplen.
+- **Dudas abiertas:** el contrato no dice si `matrices_por_grupo()` lleva una columna con el grupo; se usó `row.names = NIVELES_G` sin columna extra. Propuesta: agregar una columna `g` si 07 necesita apilar réplicas con `rbind`.
 
 ## 05_replicas.R
 
