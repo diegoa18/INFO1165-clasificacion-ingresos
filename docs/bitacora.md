@@ -71,11 +71,11 @@ Se completa una sección al cerrar cada módulo (commit en la rama de trabajo). 
 
 ## 06_resumen.R
 
-- **Estado:** pendiente
-- **Implementado:**
-- **Funciones expuestas:**
-- **Verificaciones:**
-- **Dudas abiertas:**
+- **Estado:** cerrado (2026-10-22)
+- **Implementado:** lee los `B` `.rds` con la regla común (falla si falta alguno) y escribe `tablas/replicas_indicadores.csv` (200 filas: `b`, `semilla`, `tau` y los 9 indicadores de prueba), `tablas/resumen_replicas.csv` (10 filas con `resumir()`: `variable`, `escala`, `r`, `media`, `sd`, `mediana`, `p2.5`, `p97.5`), `figuras/hist_tau.png`, `figuras/paneles_indicadores.png` (2×4, mediana e intervalo p2.5–p97.5 sombreado, `r` y escala en el subtítulo) y `figuras/boxplot_indicadores.png` (8 indicadores de proporción, eje [0, 1]). R base, 1600×1000 a 150 ppp, sin funciones que consuman el generador. Tarda ~1,7 s.
+- **Funciones expuestas:** ninguna (script). Auxiliares internas: `escribir_csv()` (precisión completa) y `abrir_png()`.
+- **Verificaciones:** `stopifnot` final sobre los 5 archivos. `Rscript tests/test_06_resumen.R` (OK): 200 filas con `b = 1:B` y `semilla == semilla_replica(b)`; cada fila del resumen es `identical()` a `resumir()` sobre la columna leída del csv; diferencia máxima frente a `mean`/`sd`/`median`/`quantile(type = 7)` de 1,1·10⁻¹⁶; `p2.5 <= mediana <= p97.5`; `BA` y `J` cumplen sus identidades fila a fila; τ₁ del csv es `identical()` al del `.rds`; existen los 3 png. Resultados (B = 200, r = 200 en todas las variables, sin `NA`): **τ_b** media 0,0482, mediana 0,0681, p2.5 −0,2156, p97.5 0,2650 (sd 0,1314); medianas en prueba: **exactitud 0,7363**, **TPR 0,7582**, **TNR 0,7283**, **BA 0,7418** (J 0,4837, PPV 0,5063, F1 0,6062).
+- **Dudas abiertas:** `write.csv` escribe solo 15 cifras significativas, lo que no cumple "precisión completa" (los valores leídos no son `identical()` a los originales). Se escriben los numéricos con `sprintf("%.17g")`, que sí se recupera exacto; las celdas quedan con 17 cifras. Propuesta: mover `escribir_csv()` a `00_utilidades.R` o documentarla en las reglas comunes de nivel 4, porque 07–09 la necesitan y no pueden llamar a 06.
 
 ## 07_grupos.R
 
