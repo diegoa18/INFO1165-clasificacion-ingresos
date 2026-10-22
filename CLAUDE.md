@@ -20,6 +20,7 @@ Ante un conflicto, manda el primero de esta lista:
 | 2 | `R/02_particion.R`, `R/03_modelo.R`, `R/04_umbral_metricas.R` | Funciones puras que solo usan la config. `04` recibe `D` como argumento y no conoce el modelo |
 | 3 | `R/05_replicas.R` | Único que combina 02–04; escribe `output/replicas/` |
 | 4 | `R/06`–`R/09` | Solo leen los `.rds` y la tabla procesada |
+| — | `tests/test_NN_*.R` | Verificaciones por módulo para el desarrollador. Usan niveles 0–2 y `data/processed/`, no escriben en `output/` y `run_all.R` no las ejecuta |
 
 `run_all.R` solo hace `source()` en orden. **Regla: un archivo solo depende de niveles inferiores.**
 
@@ -28,9 +29,9 @@ Ante un conflicto, manda el primero de esta lista:
 - Solo R base: nada de `caret`, `tidymodels` ni otros paquetes de modelado.
 - La media, la desviación estándar, la log-densidad normal y el percentil tipo 7 se implementan a mano. `mean`, `sd`, `dnorm` y `quantile` aparecen solo dentro de `stopifnot()` como comprobación.
 - El épsilon de máquina se escribe `.Machine[["double.eps"]]` (constante `EPS`).
-- Cada módulo va en su propia rama y su propio PR.
-- `docs/arquitectura.md` no se edita al implementar: si hace falta un cambio, se propone en la descripción del PR.
-- Al cerrar cada módulo se actualiza `docs/bitacora.md`.
+- Todo se desarrolla en una sola rama de trabajo: un commit por módulo (o por avance verificable) y push después de cada commit, para poder volver a un punto anterior si algo falla. No se abren PR ni se hace merge hasta que el equipo lo decida al final.
+- `docs/arquitectura.md` no se edita al implementar: si hace falta un cambio, se anota como propuesta en "Dudas abiertas" de `docs/bitacora.md`.
+- Al cerrar cada módulo se escribe o actualiza `tests/test_NN_modulo.R`, se ejecuta y se actualiza `docs/bitacora.md`.
 - `data/raw/` nunca se modifica.
 
 ## Documentación

@@ -1,6 +1,6 @@
 # Naive Bayes mixto en R base: arquitectura y estructura del proyecto
 
-Fuente normativa: la rúbrica en PDF del curso (INFO-1165, Prueba Práctica 2). Si este documento y la rúbrica difieren, manda la rúbrica. Los cambios a este documento se proponen en un PR; no se editan de paso al implementar un módulo.
+Fuente normativa: la rúbrica en PDF del curso (INFO-1165, Prueba Práctica 2). Si este documento y la rúbrica difieren, manda la rúbrica. Los cambios a este documento se anotan como propuesta en `docs/bitacora.md`; no se editan de paso al implementar un módulo.
 
 ## 1. Arquitectura matemática (confirmada contra la rúbrica)
 
@@ -170,6 +170,7 @@ $$
 │   ├── tablas/               # csv de resúmenes
 │   └── figuras/              # png
 ├── logs/                     # sesion.txt (sessionInfo, RNGkind, eps), semillas.csv
+├── tests/                    # test_NN_modulo.R: verificaciones por módulo, fuera de run_all.R
 └── docs/
     ├── arquitectura.md       # este documento
     └── bitacora.md           # registro por módulo
@@ -184,8 +185,11 @@ $$
 | 2 | `02_particion.R`, `03_modelo.R`, `04_umbral_metricas.R` | nivel 0 | ninguno (solo definen funciones) |
 | 3 | `05_replicas.R` | niveles 0–2 y `data/processed/` | escribe `output/replicas/` y `logs/` |
 | 4 | `06`–`09` | niveles 0–2, `data/processed/` y `output/replicas/` | escribe `output/tablas/` y `output/figuras/` |
+| — | `tests/test_NN_*.R` | niveles 0–2 y `data/processed/` | ninguno (no escribe en `output/`) |
 
 Un archivo solo depende de niveles inferiores. Los tres archivos de nivel 2 no se llaman entre sí: `04` recibe $D$ como vector numérico y no conoce el modelo. `05` es el único que combina partición, modelo y umbral. Los scripts de nivel 4 no vuelven a ajustar modelos: solo leen los `.rds`.
+
+`tests/` queda fuera de la jerarquía: ningún archivo de `R/` lo usa y `run_all.R` no lo ejecuta. Lo corre el desarrollador al cerrar un módulo (`Rscript tests/test_02_particion.R` desde la raiz). Cada script hace `source()` de `00_config.R` y del módulo que prueba, puede leer `data/processed/` y falla con `stopifnot()` si una verificación no se cumple.
 
 ## 3. Contratos de funciones públicas
 
@@ -200,13 +204,18 @@ Convenciones: la clase es `integer` con valores `0L`/`1L`; los índices son posi
 | `ALPHA` | numeric | `1` |
 | `EPS` | numeric | `.Machine[["double.eps"]]` |
 | `P_PERCENTILES` | numeric | `c(0.025, 0.975)` |
+| `PROPORCIONES` | numeric(3) | `c(disp = 0.8, val = 0.1, pru = 0.1)`, reparto dentro de cada clase |
 | `COLUMNAS_ADULT` | character(15) | nombres de `adult.names`, con `_` en lugar de `-` |
+| `COLUMNAS_REQUERIDAS` | character(7) | age, hours_per_week, education, sex, race, education_num, income: un faltante en ellas excluye la fila |
+| `ETIQUETAS_INGRESO` | character(2) | `c("0" = "<=50K", "1" = ">50K")` |
+| `EDUCACION_NUM_MIN` | integer | `9L` |
 | `NIVELES_E` | character(8) | HS-grad, Some-college, Assoc-voc, Assoc-acdm, Bachelors, Masters, Prof-school, Doctorate |
 | `NIVELES_SEXO` | character(2) | Female, Male |
 | `NIVELES_RAZA` | character(5) | White, Black, Asian-Pac-Islander, Amer-Indian-Eskimo, Other |
 | `NIVELES_G` | character(10) | `"Female/White"`, …, `"Male/Other"` (sexo externo, raza interno) |
 | `K_E`, `K_G` | integer | `length(NIVELES_E)`, `length(NIVELES_G)` |
 | `INDICADORES` | character(9) | exactitud, TPR, TNR, PPV, F1, FPR, FNR, BA, J |
+| `DESTINOS` | character(4) | entrenamiento, validacion, prueba, sin_seleccionar |
 | `RUTAS` | list | `raw`, `processed`, `replicas`, `tablas`, `figuras`, `logs` |
 
 `semilla_replica(b)`: `integer` $\to$ `integer`, devuelve `SEMILLA_BASE + b - 1L`.
@@ -232,7 +241,7 @@ Al ejecutarse, el script escribe `tabla_analitica.rds`, `tabla_analitica.csv` y 
 - Salida: `list(semilla, n_estrella, tamanos, indices, destino)`.
   - `tamanos`: `data.frame` por clase con `N`, `disp`, `val`, `pru`, `entrenamiento`, `sin_seleccionar`.
   - `indices`: `list(entrenamiento, validacion, prueba, sin_seleccionar)` de vectores integer.
-  - `destino`: factor de longitud $N$ con los 4 destinos.
+  - `destino`: factor de longitud $N$ con `levels = DESTINOS`.
 - Orden fijo de consumo del generador, para reproducibilidad: `set.seed(semilla)`; para $c = 0$ y luego $c = 1$, una permutación de los índices de la clase (los primeros $N_c^{\text{disp}}$ son disponibles, los siguientes $N_c^{\text{val}}$ validación, el resto prueba); después, para $c = 0$ y luego $c = 1$, un sorteo de $n_*$ entre los disponibles. Se usa `x[sample.int(length(x), n)]`, nunca `sample(x, n)`.
 - Falla con `stop()` si validación o prueba no contienen ambas clases.
 
@@ -282,3 +291,6 @@ Escribe `output/replicas/replica_XXX.rds` con `list(b, semilla, particion, model
 
 - 2026-10-22: media, desviación estándar (denominador $n_c - 1$), log-densidad normal y percentiles tipo 7 se implementan a mano. `mean`, `sd`, `dnorm` y `quantile(type = 7)` se usan solo como comprobación, con `stopifnot(abs(manual - base) < tolerancia)`.
 - 2026-10-22: el épsilon de máquina se escribe `.Machine[["double.eps"]]`.
+- 2026-10-22: `DESTINOS` pasa de `02_particion.R` a `00_config.R`, porque lo usan también `05` y los scripts de nivel 4.
+- 2026-10-22: se agrega `tests/` con un script de verificación por módulo, fuera de la jerarquía y de `run_all.R`.
+- 2026-10-22: `PROPORCIONES`, `COLUMNAS_REQUERIDAS`, `ETIQUETAS_INGRESO` y `EDUCACION_NUM_MIN` quedan documentados en la tabla de `00_config.R`. La semilla de la réplica se obtiene solo con `semilla_replica(b)`, sin alias.
