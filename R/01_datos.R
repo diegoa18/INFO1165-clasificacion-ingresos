@@ -1,6 +1,7 @@
 # Datos (nivel 1): lectura, limpieza, filtro, registro de exclusiones y tabla analitica.
 # Lee data/raw/ (sin modificarlo) y escribe data/processed/. Contrato: docs/arquitectura.md, seccion 3.
 
+if (!exists("escribir_csv")) source(file.path("R", "00_utilidades.R"))
 if (!exists("RUTAS")) source(file.path("R", "00_config.R"))
 
 # --- Funciones ----------------------------------------------------------------
@@ -76,5 +77,5 @@ stopifnot(
 # --- Escritura ----------------------------------------------------------------
 dir.create(RUTAS$processed, showWarnings = FALSE, recursive = TRUE)
 saveRDS(tabla, file.path(RUTAS$processed, "tabla_analitica.rds"))
-write.csv(tabla, file.path(RUTAS$processed, "tabla_analitica.csv"), row.names = FALSE)
-write.csv(registro, file.path(RUTAS$processed, "registro_exclusiones.csv"), row.names = FALSE)
+escribir_csv(tabla, file.path(RUTAS$processed, "tabla_analitica.csv"))
+escribir_csv(registro, file.path(RUTAS$processed, "registro_exclusiones.csv"))
