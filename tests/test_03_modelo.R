@@ -1,6 +1,7 @@
 # Test de 03_modelo.R con el entrenamiento y la validacion de la replica 1.
 # Ejecutar desde la raiz: Rscript tests/test_03_modelo.R. No escribe archivos.
 
+source(file.path("R", "00_utilidades.R"))
 source(file.path("R", "00_config.R"))
 source(file.path("R", "02_particion.R"))
 source(file.path("R", "03_modelo.R"))

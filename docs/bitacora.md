@@ -13,6 +13,14 @@ Se completa una sección al cerrar cada módulo (commit en la rama de trabajo). 
 - **Dudas abiertas:**
 -->
 
+## 00_utilidades.R
+
+- **Estado:** cerrado (2026-10-22)
+- **Implementado:** estadísticos a mano, funciones puras sin dependencias (no usa `00_config.R`). Validan la entrada con `stopifnot` (sin `NA`, longitudes mínimas, `p` en [0, 1]). Las dos primeras se movieron desde `03_modelo.R`; `run_all.R` carga este archivo antes que `00_config.R`.
+- **Funciones expuestas:** `media_manual(x)`, `sd_manual(x)` (denominador n − 1), `percentil_tipo7(x, p)`.
+- **Verificaciones:** `Rscript tests/test_00_utilidades.R` (OK). Frente a `mean`, `sd` y `quantile(type = 7)` en 7 casos (r = 1, 2, 5, con empates, constante, normal n = 1 000 y valores ~10⁸) con p ∈ {0; 0,025; 0,25; 0,5; 0,75; 0,975; 1}: diferencia máxima 4,4·10⁻¹⁶ (sd con empates), el resto 0. Casos exactos a mano: p = 0 → mínimo, p = 1 → máximo, mediana de {10, 20, 30, 40} = 25, Q(0,025) = 10,75, r = 1 devuelve el único valor, sd de una constante = 0. Fallan con `stop()`: vector vacío, `NA`, sd con n = 1, p fuera de [0, 1].
+- **Dudas abiertas:** ninguna.
+
 ## 00_config.R
 
 - **Estado:** cerrado (2026-10-22)
@@ -40,8 +48,8 @@ Se completa una sección al cerrar cada módulo (commit en la rama de trabajo). 
 ## 03_modelo.R
 
 - **Estado:** cerrado (2026-10-22)
-- **Implementado:** Naive Bayes mixto a mano: media y desviación estándar (denominador n − 1) de `age` y `hours_per_week` por clase, log-densidad normal en escala logarítmica, probabilidades de `educacion` y `g` con Laplace (`ALPHA`) sobre los niveles fijos (los niveles con 0 casos reciben α/(n_c + α·K)), previa estimada como n_c / (n_0 + n_1). Puntaje ℓ_c = log π_c + log f_edad + log f_horas + log q_e + log p_g; `D = l1 - l0`. Sin `mean`/`sd`/`dnorm`; no lee ni escribe archivos ni llama a 02/04.
-- **Funciones expuestas:** `media_manual(x)`, `sd_manual(x)`, `log_densidad_normal(z, mu, sigma)`, `ajustar_nb(entrenamiento)` → `list(n, previa, mu, sigma, conteos_g, p_g, conteos_e, q_e)`, `puntuar(modelo, datos)` → `data.frame(l0, l1, c_previa, c_edad, c_horas, c_educacion, c_g, D)`.
+- **Implementado:** Naive Bayes mixto a mano: media y desviación estándar (denominador n − 1) de `age` y `hours_per_week` por clase, log-densidad normal en escala logarítmica, probabilidades de `educacion` y `g` con Laplace (`ALPHA`) sobre los niveles fijos (los niveles con 0 casos reciben α/(n_c + α·K)), previa estimada como n_c / (n_0 + n_1). Puntaje ℓ_c = log π_c + log f_edad + log f_horas + log q_e + log p_g; `D = l1 - l0`. Sin `mean`/`sd`/`dnorm`; no lee ni escribe archivos ni llama a 02/04. Media y sd vienen de `00_utilidades.R` (refactor 2026-10-22; `test_03_modelo.R` sigue pasando con los mismos resultados).
+- **Funciones expuestas:** `log_densidad_normal(z, mu, sigma)`, `ajustar_nb(entrenamiento)` → `list(n, previa, mu, sigma, conteos_g, p_g, conteos_e, q_e)`, `puntuar(modelo, datos)` → `data.frame(l0, l1, c_previa, c_edad, c_horas, c_educacion, c_g, D)`.
 - **Verificaciones:** `Rscript tests/test_03_modelo.R` (OK) con la réplica 1. Estructura del contrato; diferencia máxima frente a R base: `mean` 0, `sd` 1,8·10⁻¹⁵, `dnorm(log = TRUE)` 3,6·10⁻¹⁵ (tolerancia EPS·n·escala); `p_g` y `q_e` suman 1 por clase y siguen la fórmula exacta; previa = 0,5 con n = 6 077 por clase y `c_previa = 0`; `D == l1 - l0` y |Σ contribuciones − D| dentro de tolerancia; puntajes finitos. Casos límite: nivel sin casos → α/(n_c + α·K); `stop()` con una clase de 1 persona y con σ = 0. Réplica 1: μ edad 36,88 / 44,14, μ horas 39,37 / 45,41, σ edad 13,35 / 10,50, σ horas 12,10 / 11,00 (clase 0 / 1). D en validación (n = 2 830): mín −5,93, mediana −0,37, máx 3,86; con corte 0, 592 de 759 positivos y 1 487 de 2 071 negativos quedan del lado correcto.
 - **Dudas abiertas:** ninguna.
 

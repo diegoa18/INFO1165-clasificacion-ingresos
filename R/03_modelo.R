@@ -1,17 +1,10 @@
 # Modelo (nivel 2): Naive Bayes mixto, estimacion y puntajes.
 # Solo depende de 00_config; no lee ni escribe archivos. Contrato: docs/arquitectura.md, seccion 3.
 
+if (!exists("media_manual")) source(file.path("R", "00_utilidades.R"))
 if (!exists("RUTAS")) source(file.path("R", "00_config.R"))
 
-# --- Estadisticos a mano ------------------------------------------------------
-
-media_manual <- function(x) sum(x) / length(x)
-
-# Denominador n - 1.
-sd_manual <- function(x) {
-  m <- media_manual(x)
-  sqrt(sum((x - m)^2) / (length(x) - 1L))
-}
+# --- Log-densidad -------------------------------------------------------------
 
 # log f(z) = -log(sigma) - log(2 pi)/2 - (z - mu)^2 / (2 sigma^2), en escala logaritmica.
 log_densidad_normal <- function(z, mu, sigma) {

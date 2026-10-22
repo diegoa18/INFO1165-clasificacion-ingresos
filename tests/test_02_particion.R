@@ -1,6 +1,7 @@
 # Test de 02_particion.R con la tabla analitica y semilla_replica(1).
 # Ejecutar desde la raiz: Rscript tests/test_02_particion.R. No escribe archivos.
 
+source(file.path("R", "00_utilidades.R"))
 source(file.path("R", "00_config.R"))
 source(file.path("R", "02_particion.R"))
 
