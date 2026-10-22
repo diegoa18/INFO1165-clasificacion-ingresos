@@ -15,7 +15,7 @@ Ante un conflicto, manda el primero de esta lista:
 
 | Nivel | Archivos | Rol |
 |---|---|---|
-| 0 | `R/00_utilidades.R` | Funciones estadísticas puras a mano (`media_manual`, `sd_manual`, `percentil_tipo7`), sin dependencias, ni siquiera de la config |
+| 0 | `R/00_utilidades.R` | Utilidades compartidas sin dependencias, ni siquiera de la config: estadísticos a mano (`media_manual`, `sd_manual`, `percentil_tipo7`) y `escribir_csv` |
 | 0 | `R/00_config.R` | Constantes, rutas y niveles de factores |
 | 1 | `R/01_datos.R` | Pasa de `data/raw/` a `data/processed/` |
 | 2 | `R/02_particion.R`, `R/03_modelo.R`, `R/04_umbral_metricas.R` | Funciones puras que solo usan el nivel 0. `04` recibe `D` como argumento y no conoce el modelo |
@@ -29,6 +29,7 @@ Ante un conflicto, manda el primero de esta lista:
 
 - Solo R base: nada de `caret`, `tidymodels` ni otros paquetes de modelado.
 - La media, la desviación estándar, la log-densidad normal y el percentil tipo 7 se implementan a mano. `mean`, `sd`, `dnorm` y `quantile` aparecen solo dentro de `stopifnot()` como comprobación.
+- Las tablas se escriben con `escribir_csv()` (17 cifras significativas), nunca con `write.csv()` directamente.
 - El épsilon de máquina se escribe `.Machine[["double.eps"]]` (constante `EPS`).
 - Todo se desarrolla en una sola rama de trabajo: un commit por módulo (o por avance verificable) y push después de cada commit, para poder volver a un punto anterior si algo falla. No se abren PR ni se hace merge hasta que el equipo lo decida al final.
 - `docs/arquitectura.md` no se edita al implementar: si hace falta un cambio, se anota como propuesta en "Dudas abiertas" de `docs/bitacora.md`.

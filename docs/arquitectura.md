@@ -152,7 +152,7 @@ $$
 ├── CLAUDE.md                 # contexto y reglas de trabajo
 ├── run_all.R                 # orquestador: solo source() en orden, sin lógica propia
 ├── R/
-│   ├── 00_utilidades.R       # nivel 0: media, sd y percentil tipo 7 a mano
+│   ├── 00_utilidades.R       # nivel 0: utilidades compartidas (estadísticos a mano, escribir_csv)
 │   ├── 00_config.R           # nivel 0: constantes, rutas, niveles de factores
 │   ├── 01_datos.R            # nivel 1: lectura, limpieza, filtro, tabla analítica
 │   ├── 02_particion.R        # nivel 2: particionar()
@@ -188,7 +188,7 @@ $$
 | 4 | `06`–`09` | niveles 0–2, `data/processed/` y `output/replicas/` | escribe `output/tablas/` y `output/figuras/` |
 | — | `tests/test_NN_*.R` | niveles 0–2 y `data/processed/` | ninguno (no escribe en `output/`) |
 
-Un archivo solo depende de niveles inferiores. Los dos archivos de nivel 0 no dependen de nada, ni entre sí: `00_utilidades.R` solo contiene funciones estadísticas puras y `00_config.R` solo constantes. `run_all.R` carga `00_utilidades.R` antes que `00_config.R`. Los tres archivos de nivel 2 no se llaman entre sí: `04` recibe $D$ como vector numérico y no conoce el modelo. `05` es el único que combina partición, modelo y umbral. Los scripts de nivel 4 no vuelven a ajustar modelos: solo leen los `.rds`.
+Un archivo solo depende de niveles inferiores. Los dos archivos de nivel 0 no dependen de nada, ni entre sí: `00_utilidades.R` solo contiene utilidades compartidas sin dependencias (estadísticos a mano y `escribir_csv()`) y `00_config.R` solo constantes. `run_all.R` carga `00_utilidades.R` antes que `00_config.R`. Los tres archivos de nivel 2 no se llaman entre sí: `04` recibe $D$ como vector numérico y no conoce el modelo. `05` es el único que combina partición, modelo y umbral. Los scripts de nivel 4 no vuelven a ajustar modelos: solo leen los `.rds`.
 
 `tests/` queda fuera de la jerarquía: ningún archivo de `R/` lo usa y `run_all.R` no lo ejecuta. Lo corre el desarrollador al cerrar un módulo (`Rscript tests/test_02_particion.R` desde la raiz). Cada script hace `source()` de `00_utilidades.R`, `00_config.R` y del módulo que prueba, puede leer `data/processed/` y falla con `stopifnot()` si una verificación no se cumple.
 
@@ -196,9 +196,11 @@ Un archivo solo depende de niveles inferiores. Los dos archivos de nivel 0 no de
 
 Convenciones: la clase es `integer` con valores `0L`/`1L`; los índices son posiciones de fila en la tabla analítica (`integer`, ordenados de forma creciente); las matrices por clase tienen filas `"0"`, `"1"`.
 
-### 00_utilidades.R (funciones puras, sin dependencias)
+### 00_utilidades.R (utilidades compartidas, sin dependencias)
 
-No usa ningún objeto de `00_config.R`. Cada función recibe vectores numéricos sin `NA` (quien llama filtra los `NA` antes) y no tiene efectos secundarios.
+Funciones que necesitan varios módulos que no pueden llamarse entre sí. No usa ningún objeto de `00_config.R`: todo lo que necesita lo recibe como argumento.
+
+**Estadísticos a mano.** Reciben vectores numéricos sin `NA` (quien llama filtra los `NA` antes) y no tienen efectos secundarios.
 
 `media_manual(x)`: `numeric` de longitud $n \ge 1$ $\to$ `numeric(1)`, $\sum x / n$.
 
@@ -206,7 +208,17 @@ No usa ningún objeto de `00_config.R`. Cada función recibe vectores numéricos
 
 `percentil_tipo7(x, p)`: `numeric` de longitud $r \ge 1$, `numeric` con valores en $[0, 1]$ $\to$ `numeric` de la longitud de `p`. Ordena `x` y aplica $h = 1 + (r - 1)p$ con interpolación lineal (sección 1).
 
-`log_densidad_normal()` se queda en `03_modelo.R`: es un componente del modelo (el término numérico del puntaje), no un estadístico de resumen, y solo lo usan `03` y los scripts que evalúan el modelo. Las tres funciones de este archivo, en cambio, las necesitan a la vez la estimación (`03`) y los resúmenes (`04`).
+`log_densidad_normal()` se queda en `03_modelo.R`: es un componente del modelo (el término numérico del puntaje), no un estadístico de resumen, y solo lo usan `03` y los scripts que evalúan el modelo. Los tres estadísticos, en cambio, los necesitan a la vez la estimación (`03`) y los resúmenes (`04`).
+
+**Escritura de tablas.**
+
+`escribir_csv(df, ruta)`: `data.frame`, `character(1)` (ruta completa del archivo, que arma quien llama, p. ej. `file.path(RUTAS[["tablas"]], "resumen_replicas.csv")`) $\to$ `invisible(ruta)`. Único efecto: escribe el archivo.
+- Reemplaza `write.csv()`, que solo escribe 15 cifras significativas.
+- Las columnas `double` se escriben con `sprintf("%.17g", x)`. Así se recupera el valor exacto, y `Inf`, `-Inf` y `NaN` se escriben con esas etiquetas.
+- Las columnas `integer` y `logical` se escriben sin comillas. Las columnas `character` y `factor` se escriben entre comillas; un factor se escribe con sus etiquetas.
+- `NA` se escribe como `NA` sin comillas, sin nombres de fila, con separador `,` y punto decimal `.`.
+- Ida y vuelta exacta: para `x <- read.csv(ruta, stringsAsFactors = FALSE)`, cada columna `double`, `integer`, `logical` o `character` de `df` es `identical()` a la de `x`, y un factor es `identical()` a `as.character()` de la suya.
+- Excepción: una columna `double` que es entera en todas sus filas vuelve como `integer` y se compara con `as.numeric()`. Una columna `double` que es toda `NA` vuelve como `logical`.
 
 ### 00_config.R (objetos, sin funciones salvo una)
 
@@ -315,14 +327,14 @@ También escribe `logs/semillas.csv` (`b`, `semilla`, `n_estrella`, tamaños de 
 - Cada script hace `source()` de `00_utilidades.R`, `00_config.R` y de los módulos de nivel 2 que use (`03` para `log_densidad_normal()`, `04` para `indicadores()` y `resumir()`). No vuelve a ajustar modelos ni a particionar: solo lee `output/replicas/replica_XXX.rds` y `data/processed/tabla_analitica.rds`.
 - Lectura de réplicas: `lapply(sprintf("replica_%03d.rds", seq_len(B)), ...)` sobre `RUTAS[["replicas"]]`; falla con `stop()` si falta alguno de los `B` archivos. Los scripts de nivel 4 no se llaman entre sí, así que cada uno repite esta lectura.
 - Para cruzar con los predictores se une por `id_original` con la tabla analítica. Los índices de `particion[["indices"]]` son posiciones de fila de esa misma tabla.
-- Tablas: `write.csv(..., row.names = FALSE)` en `RUTAS[["tablas"]]`, con precisión completa (se redondea solo al presentar en el informe). Las tasas van como proporciones en $[0, 1]$ y Youden en su escala, de $-1$ a $1$. Un indicador no estimable queda como `NA`.
+- Tablas: `escribir_csv(df, file.path(RUTAS[["tablas"]], archivo))` de `00_utilidades.R`, nunca `write.csv()` directamente, para conservar la precisión completa (se redondea solo al presentar en el informe). Las tasas van como proporciones en $[0, 1]$ y Youden en su escala, de $-1$ a $1$. Un indicador no estimable queda como `NA`.
 - Figuras: gráficos de R base (`plot`, `hist`, `boxplot`, `qqnorm`, `segments`, `abline`), con `png(..., width = 1600, height = 1000, res = 150)` en `RUTAS[["figuras"]]`. Cada figura indica en el título o subtítulo la réplica o el resumen, el subconjunto (validación o prueba) y la escala.
 - Ninguna figura usa `jitter()` ni otra función que consuma el generador aleatorio. Si hace falta mostrar puntos superpuestos se usa transparencia con `rgb(..., alpha = )`.
 - Al final, cada script verifica con `stopifnot()` que escribió todos los archivos de su contrato.
 
 ### 06_resumen.R (distribución de $\tau_b$ e indicadores de prueba)
 
-Lee: los $B$ `.rds` (`b`, `semilla`, `umbral[["tau"]]`, `indicadores_prueba`).
+Lee: los $B$ `.rds` (`b`, `semilla`, `umbral[["tau"]]`, `indicadores_prueba`). Escribe las dos tablas con `escribir_csv()`.
 
 | Archivo | Contenido |
 |---|---|
@@ -392,3 +404,4 @@ Verificaciones: las previas suman 1 y las probabilidades de `g` y de educación 
 - 2026-10-22: se crea `00_utilidades.R` en el nivel 0 con `media_manual()`, `sd_manual()` y `percentil_tipo7()`, porque `03` y `04` las necesitan y no pueden llamarse entre sí. `log_densidad_normal()` se queda en `03`.
 - 2026-10-22: `matrices_por_grupo()` devuelve formato largo con columna `g` (factor) y sin nombres de fila, para que `05` la guarde tal cual y `07` apile las réplicas con `rbind` agregando `b`.
 - 2026-10-22: contratos de 06–09 con nombres de archivo, columnas y figuras. Las evidencias que la rúbrica pide para la réplica 1 se reparten así: tamaños, parámetros, densidad, probabilidades, persona y curvas de validación en `09`; composición y marginales por grupo en `07`; Q–Q, dependencias, verificaciones y duplicados en `08`.
+- 2026-10-22: `escribir_csv()` pasa de `06_resumen.R` a `00_utilidades.R`, porque la usan 06–09 y no pueden llamarse entre sí. Recibe la ruta completa para no depender de `RUTAS`. `00_utilidades.R` pasa a reunir utilidades compartidas, no solo estadísticos.
