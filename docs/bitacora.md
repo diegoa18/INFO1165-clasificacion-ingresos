@@ -79,11 +79,15 @@ Se completa una sección al cerrar cada módulo (commit en la rama de trabajo). 
 
 ## 07_grupos.R
 
-- **Estado:** pendiente
-- **Implementado:**
-- **Funciones expuestas:**
-- **Verificaciones:**
-- **Dudas abiertas:**
+- **Estado:** cerrado (2026-10-22)
+- **Implementado:** lee los `B` `.rds` con la regla común, apila `grupos_prueba` con columna `b` (2 000 filas) y verifica en cada réplica que las 10 matrices suman `matriz_prueba` y `n` suma `nrow(prueba)`. Escribe con `escribir_csv()`: `tablas/grupos_replicas.csv`, `tablas/resumen_grupos.csv` (30 filas, orden `NIVELES_G` × TPR, FPR, FNR; denominador, su mínimo/mediana/máximo y `resumir()`), `tablas/grupos_replica1.csv` y las marginales por sexo y por raza de la réplica 1 (suma de conteos antes de calcular tasas). Figura `figuras/tasas_grupos.png`: tres paneles con mediana y segmento p2.5–p97.5 por grupo, eje [0, 1], mediana del denominador y `r` junto a la etiqueta. Tarda ~2 s.
+- **Funciones expuestas:** ninguna (script). Auxiliares internas: `tasa()`, `tabla_conteos()`, `marginal()`.
+- **Verificaciones:** `stopifnot` en el script (sumas por réplica, marginales = matriz global de la réplica 1, 5 tablas y png escritos). `Rscript tests/test_07_grupos.R` (OK, 1,4 s): 10·B filas en orden; en cada réplica Σ M_g = `matriz_prueba` y Σ n = `nrow(prueba)`, contrastado contra los `.rds`; 201 filas grupo-réplica sin positivos en prueba (Female/Other 107, Female/Amer-Indian-Eskimo 44, Male/Other 30, Male/Amer-Indian-Eskimo 18, Female/Asian-Pac-Islander 2) con `TPR` y `FNR` en `NA`, y `r = #(n_1 > 0)` (p. ej. Female/Other: r = 93 en TPR y FNR); cada fila del resumen es `identical()` a `resumir()` y a los estadísticos del denominador; marginales por sexo y por raza suman la matriz global de la réplica 1 y sus tasas salen de los conteos sumados; existe el png.
+- **Resultados (medianas entre réplicas, prueba):**
+  - **TPR mayor:** Male/Asian-Pac-Islander 0,893 (mediana n_1 = 23) y Male/White 0,860 (n_1 = 590). **TPR menor:** Female/Other 0,000 (n_1 mediano 0; r = 93) y, entre grupos con r = 200, Female/Black 0,125 (n_1 = 8) y Female/White 0,321 (n_1 = 102).
+  - **FPR mayor:** Male/Asian-Pac-Islander 0,474 (n_0 = 42) y Male/White 0,438 (n_0 = 1 078). **FPR menor:** Female/Amer-Indian-Eskimo y Female/Other 0,000 (n_0 = 9 y 7), y Female/Black 0,008 (n_0 = 120).
+  - Patrón: el modelo detecta mucho más a los hombres (marginal réplica 1: TPR 0,830 vs 0,327) a costa de más falsos positivos (FPR 0,385 vs 0,063). Los grupos pequeños tienen intervalos p2.5–p97.5 que cubren casi todo [0, 1], por lo que sus medianas no son informativas.
+- **Dudas abiertas:** el contrato no fija el orden de las 30 filas de `resumen_grupos.csv`; se usó `NIVELES_G` y, dentro de cada grupo, TPR, FPR, FNR.
 
 ## 08_diagnosticos.R
 
