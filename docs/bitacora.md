@@ -104,8 +104,33 @@ Se completa una sección al cerrar cada módulo (commit en la rama de trabajo). 
 
 ## 09_replica1.R
 
-- **Estado:** pendiente
-- **Implementado:**
-- **Funciones expuestas:**
-- **Verificaciones:**
-- **Dudas abiertas:**
+- **Estado:** cerrado (2026-10-22)
+- **Implementado:** lee la tabla analítica y `replica_001.rds`; no reajusta. Escribe con `escribir_csv()` las 7 tablas del contrato: `tamanos_replica1.csv` (tamaños por clase + `n_estrella`), `parametros_replica1.csv`, `densidad_ejemplo_replica1.csv` (edad 37 de la persona, `log_f` con `log_densidad_normal()`, `f`, `F` con `pnorm()`), `probabilidades_g_replica1.csv` (20 filas) y `probabilidades_e_replica1.csv` (16 filas), `persona_replica1.csv` (con `l0` y `l1` recalculados con `puntuar()` y el modelo guardado) y `candidatos_replica1.csv` (1 856 cortes + `exactitud`, `PPV`, `F1`, `FPR` con `indicadores()`, `J_max`, `eps`, `elegido`). Figura `curvas_validacion_replica1.png`: indicadores de validación frente a los cortes finitos con línea en τ₁, y el corte +∞ en un panel aparte (TNR = 1, exactitud = 0,732, TPR = F1 = FPR = 0, PPV = `NA` marcado). Tarda ~0,6–1,2 s.
+- **Funciones expuestas:** ninguna (script). Auxiliares internas: `ruta_tabla()`, `largo()`.
+- **Verificaciones:** `stopifnot` en el script y `Rscript tests/test_09_replica1.R` (OK): columnas del contrato y coincidencia con el `.rds`; previas, p_g y q_e suman 1 con K·EPS; persona: |Σ contribuciones − D| = 0,11·EPS relativo (límite 16·EPS), `D == l1 - l0`, `pred == (D >= tau)`, `l0`, `l1` y `D` `identical()` al recálculo; un único `elegido`, con `tau` = `umbral[["tau"]]` = 0,0991012, empatado y con indicadores `identical()` a `indicadores()`; en +∞ el `PPV` es `NA`; `log_f` frente a `dnorm(log = TRUE)` ≤ 3·EPS·max(1, |ref|) y la diferencia de `log_f` entre clases es `identical()` a `c_edad` de la persona; existe el png.
+- **Resultados:** la persona de ejemplo (id 11; 37 años, 80 h, Some-college, Male/Black, clase real 1) tiene D = −0,0277 < τ₁ = 0,0991, así que es un **falso negativo**: las horas suman a favor de la clase 1 (c_horas = +0,787) pero educación (−0,472) y categoría conjunta (−0,352) pesan más.
+- **Dudas abiertas:** ninguna.
+
+## Ejecución completa (`run_all.R`)
+
+- **Fecha:** 2026-10-22, R 4.6.1, Windows 11.
+- **Desde cero:** se retiraron todas las salidas generadas (`data/processed`, `output/replicas`, `output/tablas`, `output/figuras`, `logs/semillas.csv`, `logs/sesion.txt`), quedando solo `data/raw/adult.data` y `adult.names`. `run_all.R` ejecutado por expresiones (`parse()` + `eval()`, mismo orden y sesión) para cronometrar cada `source()`:
+
+  | Script | Segundos |
+  |---|---|
+  | 00_utilidades.R | 0,00 |
+  | 00_config.R | 0,02 |
+  | 01_datos.R | 1,44 |
+  | 02_particion.R | 0,00 |
+  | 03_modelo.R | 0,00 |
+  | 04_umbral_metricas.R | 0,02 |
+  | 05_replicas.R | 123,17 |
+  | 06_resumen.R | 1,81 |
+  | 07_grupos.R | 1,92 |
+  | 08_diagnosticos.R | 9,02 |
+  | 09_replica1.R | 0,59 |
+  | **Total** | **138,6** |
+
+  Luego `Rscript run_all.R` tal cual: 137,5 s, sin errores. 05 representa el 89 % del tiempo (antes había tardado 88,9 s; la diferencia es de la máquina, no del código).
+- **Reproducibilidad:** tras la corrida desde cero, `tabla_analitica.rds` y los 200 `replica_XXX.rds` son `identical()` a los de la corrida anterior, y los 17 csv de `output/tablas/` son idénticos línea a línea. Se generan 200 `.rds`, 17 tablas y 7 figuras.
+- **Tests:** los 9 `tests/test_*.R` (00, 02–09) pasan; ~12 s en total.
