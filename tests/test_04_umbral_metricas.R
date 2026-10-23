@@ -10,13 +10,15 @@ source(file.path("R", "04_umbral_metricas.R"))
 tol <- function(ref, n = 1L) EPS * n * max(1, abs(ref))
 iguales <- function(a, b) all((is.na(a) & is.na(b)) | (!is.na(a) & !is.na(b) & abs(a - b) <= tol(1, 4L)))
 
-# Identidades de los indicadores (solo donde son estimables).
+# Identidades de los indicadores (solo donde son estimables), con la tolerancia del
+# contrato para identidades entre indicadores: 4 * EPS.
+TOL_IDENT <- 4 * EPS
 identidades <- function(ind) {
   with(as.list(ind), all(c(
-    is.na(TPR) || is.na(FNR) || abs(TPR + FNR - 1) <= tol(1, 2L),
-    is.na(TNR) || is.na(FPR) || abs(TNR + FPR - 1) <= tol(1, 2L),
-    is.na(BA)  || abs(BA - (TPR + TNR) / 2) <= tol(1, 2L),
-    is.na(J)   || abs(J - (TPR + TNR - 1)) <= tol(1, 2L)
+    is.na(TPR) || is.na(FNR) || abs(TPR + FNR - 1) <= TOL_IDENT,
+    is.na(TNR) || is.na(FPR) || abs(TNR + FPR - 1) <= TOL_IDENT,
+    is.na(BA)  || abs(BA - (TPR + TNR) / 2) <= TOL_IDENT,
+    is.na(J)   || abs(J - (TPR + TNR - 1)) <= TOL_IDENT
   )))
 }
 

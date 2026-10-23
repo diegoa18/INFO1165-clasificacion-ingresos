@@ -6,7 +6,10 @@ source(file.path("R", "00_utilidades.R"))
 source(file.path("R", "00_config.R"))
 source(file.path("R", "04_umbral_metricas.R"))
 
-tol <- function(ref, k = 4L) EPS * k * max(1, abs(ref))
+# Tolerancias del contrato ("Tolerancias numericas"): identidades entre indicadores 4 * EPS;
+# a mano frente a R base n * EPS * max(1, |referencia|), con n = valores sumados (r).
+TOL_IDENT <- 4 * EPS
+tol <- function(ref, n) EPS * n * max(1, abs(ref))
 
 por_replica <- read.csv(file.path(RUTAS$tablas, "replicas_indicadores.csv"))
 resumen     <- read.csv(file.path(RUTAS$tablas, "resumen_replicas.csv"))
@@ -19,8 +22,10 @@ stopifnot(
   identical(por_replica$b, seq_len(B)),                       # sin faltantes ni duplicados
   identical(por_replica$semilla, semilla_replica(seq_len(B))),
   # identidades fila a fila
-  all(abs(por_replica$BA - (por_replica$TPR + por_replica$TNR) / 2) <= tol(1)),
-  all(abs(por_replica$J - (por_replica$TPR + por_replica$TNR - 1)) <= tol(1)),
+  all(abs(por_replica$BA - (por_replica$TPR + por_replica$TNR) / 2) <= TOL_IDENT),
+  all(abs(por_replica$J - (por_replica$TPR + por_replica$TNR - 1)) <= TOL_IDENT),
+  all(abs(por_replica$TPR + por_replica$FNR - 1) <= TOL_IDENT),
+  all(abs(por_replica$TNR + por_replica$FPR - 1) <= TOL_IDENT),
   # precision completa: tau_1 igual al .rds
   identical(por_replica$tau[1], readRDS(file.path(RUTAS$replicas, "replica_001.rds"))$umbral$tau),
   abs(por_replica$tau[1] - 0.0991012) < 5e-8
@@ -45,7 +50,7 @@ for (i in seq_along(VARIABLES)) {
   xe <- x[!is.na(x)]
   base <- c(length(xe), mean(xe), sd(xe), median(xe), quantile(xe, P_PERCENTILES, type = 7))
   d <- abs(unname(fi) - unname(base))
-  stopifnot(fi[["r"]] == length(xe), all(d <= vapply(base, tol, numeric(1), k = 2L * B)))
+  stopifnot(fi[["r"]] == length(xe), all(d <= vapply(base, tol, numeric(1), n = length(xe))))
   dif_base <- max(dif_base, d)
 }
 

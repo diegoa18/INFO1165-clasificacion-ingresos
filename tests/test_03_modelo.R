@@ -14,9 +14,13 @@ val   <- tabla[part$indices$validacion, ]
 modelo <- ajustar_nb(entr)
 punt   <- puntuar(modelo, val)
 
-# Tolerancia EPS * escala, con escala = n * max|valor de referencia|
-# (cota del error de redondeo acumulado en una suma de n terminos).
-tol <- function(ref, n = 1L) EPS * n * max(1, abs(ref))
+# Tolerancias del contrato ("Tolerancias numericas"):
+# - a mano frente a R base: n * EPS * max(1, |referencia|), n = terminos sumados (elemento a elemento);
+# - suma de K probabilidades: K * EPS;
+# - contribuciones frente a D: 16 * EPS * max(|l1|, |l0|, 1), persona a persona.
+tol         <- function(ref, n = 1L) EPS * n * pmax(1, abs(ref))
+tol_contrib <- function(l1, l0) 16 * EPS * pmax(abs(l1), abs(l0), 1)
+N_TERM_LOGDENS <- 3L   # -log(sigma), -log(2 pi)/2, -(z - mu)^2 / (2 sigma^2)
 
 # --- Parametros estimados -----------------------------------------------------
 cat("== n y previa ==\n"); print(rbind(n = modelo$n, previa = modelo$previa))
@@ -73,25 +77,32 @@ stopifnot(
     }
     ok
   }, logical(1))),
-  all(abs(log_densidad_normal(as.numeric(val$age), modelo$mu["1", "edad"], modelo$sigma["1", "edad"]) -
-          dnorm(as.numeric(val$age), modelo$mu["1", "edad"], modelo$sigma["1", "edad"], log = TRUE))
-      <= tol(dnorm(as.numeric(val$age), modelo$mu["1", "edad"], modelo$sigma["1", "edad"], log = TRUE))),
-  dif["logdens"] <= tol(max(abs(punt$l0), abs(punt$l1))),
+  all(vapply(c("0", "1"), function(k) {
+    all(vapply(list(c("age", "edad"), c("hours_per_week", "horas")), function(v) {
+      z   <- as.numeric(val[[v[1]]])
+      ref <- dnorm(z, modelo$mu[k, v[2]], modelo$sigma[k, v[2]], log = TRUE)
+      all(abs(log_densidad_normal(z, modelo$mu[k, v[2]], modelo$sigma[k, v[2]]) - ref) <=
+            tol(ref, N_TERM_LOGDENS))
+    }, logical(1)))
+  }, logical(1))),
   # Laplace: suma 1 por clase y formula exacta
-  all(abs(rowSums(modelo$p_g) - 1) <= tol(1, K_G)),
-  all(abs(rowSums(modelo$q_e) - 1) <= tol(1, K_E)),
+  all(abs(rowSums(modelo$p_g) - 1) <= K_G * EPS),
+  all(abs(rowSums(modelo$q_e) - 1) <= K_E * EPS),
   all(modelo$p_g == (modelo$conteos_g + ALPHA) / (n_c + ALPHA * K_G)),
   all(modelo$q_e == (modelo$conteos_e + ALPHA) / (n_c + ALPHA * K_E)),
   all(rowSums(modelo$conteos_g) == n_c), all(rowSums(modelo$conteos_e) == n_c),
   # previa de la replica 1
   all(modelo$n == part$n_estrella),
-  all(modelo$previa == 0.5), abs(sum(modelo$previa) - 1) <= EPS,
+  all(modelo$previa == 0.5), abs(sum(modelo$previa) - 1) <= 2 * EPS,
   all(punt$c_previa == 0),
   # D = l1 - l0 = suma de las contribuciones
   all(is.finite(punt$l0)), all(is.finite(punt$l1)), all(is.finite(punt$D)),
   all(punt$D == punt$l1 - punt$l0),
-  all(abs(suma_contrib - punt$D) <= tol(max(abs(punt$l0), abs(punt$l1)), 10L))
+  all(abs(suma_contrib - punt$D) <= tol_contrib(punt$l1, punt$l0))
 )
+cat("max |suma contribuciones - D| relativo:",
+    sprintf("%.2f EPS (limite 16 EPS)\n",
+            max(abs(suma_contrib - punt$D) / pmax(abs(punt$l1), abs(punt$l0), 1)) / EPS))
 
 # --- Casos limite -------------------------------------------------------------
 # Un nivel con 0 casos recibe alpha / (n_c + alpha K).
@@ -101,7 +112,7 @@ stopifnot(
   all(m0$conteos_g[, "Female/Other"] == 0),
   all(m0$p_g[, "Female/Other"] == ALPHA / (m0$n + ALPHA * K_G)),
   all(m0$q_e[, "Doctorate"] == ALPHA / (m0$n + ALPHA * K_E)),
-  all(abs(rowSums(m0$p_g) - 1) <= tol(1, K_G))
+  all(abs(rowSums(m0$p_g) - 1) <= K_G * EPS)
 )
 
 # Fallas esperadas: clase con menos de 2 personas y sigma = 0.

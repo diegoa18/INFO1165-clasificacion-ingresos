@@ -5,6 +5,7 @@
 
 if (!exists("media_manual")) source(file.path("R", "00_utilidades.R"))
 if (!exists("RUTAS")) source(file.path("R", "00_config.R"))
+if (!exists("puntuar")) source(file.path("R", "03_modelo.R"))
 
 # --- Lectura ------------------------------------------------------------------------
 tabla <- readRDS(file.path(RUTAS[["processed"]], "tabla_analitica.rds"))
@@ -85,6 +86,11 @@ verificaciones <- do.call(rbind, lapply(replicas, function(r) {
   gp  <- r[["grupos_prueba"]]
   ns  <- r[["particion"]][["n_estrella"]]
   ent_clase <- tabla$clase[idx[["entrenamiento"]]]
+  # l0 y l1 no se guardan: se recalculan con el modelo guardado (sin reajustar),
+  # tomando las filas de prueba de la tabla analitica por id_original.
+  punt <- puntuar(m, tabla[match(pr$id_original, tabla$id_original), ])
+  err  <- abs(rowSums(pr[CONTRIBUCIONES]) - pr$D)
+  err_rel <- err / pmax(abs(punt$l1), abs(punt$l0), 1)
   data.frame(
     b                      = r[["b"]],
     err_previa             = abs(sum(m[["previa"]]) - 1),
@@ -98,7 +104,10 @@ verificaciones <- do.call(rbind, lapply(replicas, function(r) {
     todos_con_destino      = length(todos) == N && setequal(todos, seq_len(N)) &&
                              !anyNA(r[["particion"]][["destino"]]),
     puntajes_finitos       = all(is.finite(pr$D)),
-    max_err_contribuciones = max(abs(rowSums(pr[CONTRIBUCIONES]) - pr$D)),
+    D_recalculado_identico = identical(punt$D, pr$D),
+    max_err_contribuciones = max(err),
+    max_err_contribuciones_rel = max(err_rel),
+    contribuciones_ok      = max(err_rel) <= 16 * EPS,
     matriz_suma_n          = sum(r[["matriz_prueba"]]) == nrow(pr),
     grupos_suman_global    = identical(c(TN = sum(gp$TN), FP = sum(gp$FP), FN = sum(gp$FN),
                                          TP = sum(gp$TP)), r[["matriz_prueba"]])
@@ -134,6 +143,9 @@ stopifnot(
   nrow(educacion_g) == 2L * K_E * K_G, sum(educacion_g$n) == nrow(entr),
   nrow(verificaciones) == B, identical(verificaciones$b, seq_len(B)),
   all(as.matrix(verificaciones[vapply(verificaciones, is.logical, logical(1))])),
+  all(verificaciones$err_previa <= 2 * EPS),
+  all(verificaciones$err_p_g_0 <= K_G * EPS), all(verificaciones$err_p_g_1 <= K_G * EPS),
+  all(verificaciones$err_q_e_0 <= K_E * EPS), all(verificaciones$err_q_e_1 <= K_E * EPS),
   file.exists(file.path(RUTAS[["tablas"]], TABLAS_08)),
   file.exists(file.path(RUTAS[["figuras"]], c("qq_replica1.png", "edad_horas_replica1.png")))
 )
