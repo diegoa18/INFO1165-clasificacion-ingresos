@@ -322,6 +322,33 @@ Para cada $b = 1, \dots, B$ escribe `output/replicas/replica_XXX.rds` (`XXX` = `
 
 También escribe `logs/semillas.csv` (`b`, `semilla`, `n_estrella`, tamaños de los 4 destinos) y `logs/sesion.txt` (`sessionInfo()`, `RNGkind()`, `EPS`).
 
+### Tolerancias numéricas (todas las verificaciones)
+
+Toda comparación entre valores calculados por caminos distintos usa una de estas tolerancias, en los scripts y en `tests/`. Nunca se usa una tolerancia absoluta fija para cantidades cuya magnitud varía.
+
+| Comparación | Tolerancia | Dónde |
+|---|---|---|
+| Suma de $K$ probabilidades frente a 1 (previas $K = 2$, educación $K = K_E$, categoría conjunta $K = K_G$) | $\lvert \sum - 1 \rvert \le K \cdot \varepsilon_{\text{mach}}$ | `03`, `08`, `09`, tests |
+| Suma de las cinco contribuciones frente a $D_i$ | $\lvert \sum_k c_{k,i} - D_i \rvert \le 16 \cdot \varepsilon_{\text{mach}} \cdot \max\left(\lvert \ell_1(x_i) \rvert, \lvert \ell_0(x_i) \rvert, 1\right)$, persona a persona | `03` (test), `08`, `09` |
+| Identidades entre indicadores ($\text{BA} = (\text{TPR}+\text{TNR})/2$, $J = \text{TPR}+\text{TNR}-1$, $\text{TPR}+\text{FNR} = 1$, $\text{TNR}+\text{FPR} = 1$) | $4 \cdot \varepsilon_{\text{mach}}$ (los valores están en $[-1, 1]$) | `04`, `06`, tests |
+| Función a mano frente a R base (`mean`, `sd`, `dnorm`, `quantile`) | $n \cdot \varepsilon_{\text{mach}} \cdot \max(1, \lvert \text{referencia} \rvert)$, con $n$ el número de términos sumados | tests de `00_utilidades` y `03` |
+| Valores que deben ser deterministas (recalcular una réplica, `D` guardado frente a `D` recalculado) | `identical()`, sin tolerancia | `05`, `08` |
+
+**Por qué $k = 16$ y escala $\max(\lvert\ell_1\rvert, \lvert\ell_0\rvert, 1)$ para las contribuciones.** El error no depende de $D$, que puede ser casi cero, sino del tamaño de los puntajes que se restan. Los cinco términos de $\ell_c$ son negativos: son logaritmos de probabilidades menores que 1 y de densidades con $\hat\sigma > 1/\sqrt{2\pi}$. Por eso cada término cumple $\lvert \text{término} \rvert \le \lvert \ell_c \rvert$.
+
+Cada cálculo encadena unas 14 operaciones de punto flotante, cada una con error de a lo más $\varepsilon_{\text{mach}}/2$ relativo a $\max\lvert\ell_c\rvert$:
+
+- 4 sumas por clase para formar $\ell_c$;
+- la resta $\ell_1 - \ell_0$;
+- 5 restas para las contribuciones;
+- 4 sumas de las contribuciones.
+
+Eso da una cota de unos $7\,\varepsilon_{\text{mach}} \max\lvert\ell_c\rvert$, más unos pocos ulps de `log()` en cada término. Con $k = 16$ queda un margen de algo más de 2 sobre esa cota.
+
+En las 200 réplicas el máximo observado fue $41\,\varepsilon_{\text{mach}}$ absoluto con $\lvert\ell_c\rvert$ entre 12 y 20. Eso equivale a menos de $3{,}5\,\varepsilon_{\text{mach}}$ relativo, un margen de unas 4,6 veces frente a $k = 16$. La tolerancia fija de $128\,\varepsilon_{\text{mach}}$ que se usaba sería demasiado holgada con puntajes pequeños y demasiado estricta si los puntajes crecieran.
+
+`prueba` no guarda $\ell_0$ ni $\ell_1$. Por eso, quien necesite esta tolerancia (`08`, `09`) los recalcula con `puntuar(modelo, datos)` de `03` usando el `modelo` guardado. Eso no vuelve a ajustar el modelo. Las filas de prueba se toman de la tabla analítica uniendo por `id_original`, y se verifica que el `D` recalculado sea `identical()` al guardado.
+
 ### Nivel 4: reglas comunes a 06–09
 
 - Cada script hace `source()` de `00_utilidades.R`, `00_config.R` y de los módulos de nivel 2 que use (`03` para `log_densidad_normal()`, `04` para `indicadores()` y `resumir()`). No vuelve a ajustar modelos ni a particionar: solo lee `output/replicas/replica_XXX.rds` y `data/processed/tabla_analitica.rds`.
@@ -344,7 +371,7 @@ Lee: los $B$ `.rds` (`b`, `semilla`, `umbral[["tau"]]`, `indicadores_prueba`). E
 | `figuras/paneles_indicadores.png` | Panel 2×4 de histogramas: `tau`, `exactitud`, `TPR`, `TNR`, `PPV`, `F1`, `BA`, `J`. Cada uno marca la mediana y el intervalo p2.5–p97.5, e indica `r` en el subtítulo |
 | `figuras/boxplot_indicadores.png` | Un boxplot por indicador en escala de proporción (`exactitud`, `TPR`, `TNR`, `PPV`, `F1`, `FPR`, `FNR`, `BA`), con eje $[0, 1]$. `J` queda fuera porque su escala es distinta y ya aparece en los paneles |
 
-Verificaciones: 200 filas con `b` = `1:B` y `semilla == semilla_replica(b)`; `resumen_replicas.csv` coincide con `resumir()` aplicado a cada columna de `replicas_indicadores.csv`; `p2.5 <= mediana <= p97.5`; `BA == (TPR + TNR)/2` y `J == TPR + TNR - 1` fila a fila, con tolerancia `EPS` multiplicado por un factor pequeño.
+Verificaciones: 200 filas con `b` = `1:B` y `semilla == semilla_replica(b)`; `resumen_replicas.csv` coincide con `resumir()` aplicado a cada columna de `replicas_indicadores.csv`; `p2.5 <= mediana <= p97.5`; `BA == (TPR + TNR)/2` y `J == TPR + TNR - 1` fila a fila, con la tolerancia de identidades entre indicadores ($4 \cdot \varepsilon_{\text{mach}}$).
 
 ### 07_grupos.R (errores por categoría conjunta)
 
@@ -371,11 +398,11 @@ Lee: tabla analítica y los $B$ `.rds`. La réplica 1 se usa para los gráficos;
 |---|---|
 | `figuras/qq_replica1.png` | Panel 2×2 con `qqnorm()` y `qqline()`: edad y horas × clase 0 y 1, del entrenamiento de la réplica 1. El título de cada panel indica la variable, la clase y $n$ |
 | `figuras/edad_horas_replica1.png` | Dos paneles (clase 0 y 1), dispersión de edad frente a horas en el entrenamiento de la réplica 1, con transparencia. El subtítulo indica la correlación de Pearson calculada a mano |
-| `tablas/educacion_g_replica1.csv` | Entrenamiento de la réplica 1 en formato largo: `clase`, `educacion`, `g`, `n` ($2 \times 8 \times 10 = 160$ filas, con ceros incluidos) |
-| `tablas/verificaciones_replicas.csv` | $B$ filas. Columnas `b`; `err_previa` ($\lvert\sum_c \hat\pi_c - 1\rvert$); `err_p_g_0`, `err_p_g_1` ($\lvert\sum_g \hat p_{c,g} - 1\rvert$); `err_q_e_0`, `err_q_e_1`; `n_estrella_ok`; `destinos_disjuntos`; `todos_con_destino`; `puntajes_finitos` (todos los `D` de prueba); `max_err_contribuciones` (máximo de $\lvert\sum \text{contribuciones} - D\rvert$); `matriz_suma_n` (la matriz de prueba suma `nrow(prueba)`); `grupos_suman_global` |
-| `tablas/trazabilidad.csv` | Pares `indicador`, `valor`: `filas_tabla_analitica`, `perfiles_distintos`, `duplicados_excedentes` (con las 15 columnas originales y sin `id_original`; un perfil repetido 3 veces aporta 2) y, para la réplica 1, `n_prueba`, `prueba_coincide_entrenamiento`, `prueba_coincide_validacion`, `prueba_coincide_alguno` |
+| `tablas/educacion_g_replica1.csv` | Entrenamiento de la réplica 1 en formato largo: `clase`, `educacion`, `g`, `n` ($2 \times 8 \times 10 = 160$ filas, con ceros incluidos). Orden: `clase` (0, 1), dentro de ella `educacion` en el orden de `NIVELES_E`, y dentro de esta `g` en el orden de `NIVELES_G`; `g` varía más rápido |
+| `tablas/verificaciones_replicas.csv` | $B$ filas. Columnas `b`; `err_previa` ($\lvert\sum_c \hat\pi_c - 1\rvert$); `err_p_g_0`, `err_p_g_1` ($\lvert\sum_g \hat p_{c,g} - 1\rvert$); `err_q_e_0`, `err_q_e_1`; `n_estrella_ok`; `destinos_disjuntos`; `todos_con_destino`; `puntajes_finitos` (todos los `D` de prueba); `D_recalculado_identico` (el `D` de `puntuar()` con el `modelo` guardado es `identical()` al de `prueba`); `max_err_contribuciones` (máximo absoluto de $\lvert\sum \text{contribuciones} - D\rvert$); `max_err_contribuciones_rel` (máximo de ese error dividido por $\max(\lvert\ell_1\rvert, \lvert\ell_0\rvert, 1)$ de cada persona); `contribuciones_ok` (`max_err_contribuciones_rel` $\le 16 \cdot \varepsilon_{\text{mach}}$); `matriz_suma_n` (la matriz de prueba suma `nrow(prueba)`); `grupos_suman_global` |
+| `tablas/trazabilidad.csv` | Pares `indicador`, `valor`: `filas_tabla_analitica`, `perfiles_distintos`, `duplicados_excedentes` (con las 15 columnas originales y sin `id_original`; un perfil repetido 3 veces aporta 2) y, para la réplica 1, `n_prueba`, `prueba_coincide_entrenamiento`, `prueba_coincide_validacion`, `prueba_coincide_alguno`. Estos tres cuentan **personas de prueba**, no perfiles distintos: el número de personas de prueba cuyo perfil (15 columnas) aparece al menos una vez en entrenamiento, al menos una vez en validación, o en cualquiera de los dos. `prueba_coincide_alguno` puede ser menor que la suma de los otros dos. `NA` cuenta como un valor más al comparar perfiles |
 
-Verificaciones: todas las columnas lógicas de `verificaciones_replicas.csv` son `TRUE`; los errores de suma son menores que un múltiplo pequeño de `EPS`. Las diferencias observadas se guardan tal cual, porque la rúbrica pide registrarlas, no solo aprobarlas.
+Verificaciones: todas las columnas lógicas de `verificaciones_replicas.csv` son `TRUE`; los errores de suma de probabilidades cumplen la tolerancia $K \cdot \varepsilon_{\text{mach}}$ y las contribuciones la tolerancia relativa (sección "Tolerancias numéricas"). Las diferencias observadas se guardan tal cual, porque la rúbrica pide registrarlas, no solo aprobarlas.
 
 ### 09_replica1.R (evidencias de la réplica 1 para el informe)
 
@@ -388,11 +415,11 @@ Lee: tabla analítica y `replica_001.rds`.
 | `tablas/densidad_ejemplo_replica1.csv` | Para la edad observada de la persona de `persona_replica1.csv` y cada clase: `clase`, `z`, `mu`, `sigma`, `log_f` (con `log_densidad_normal()`), `f` (`exp(log_f)`), `F` (`pnorm()`, solo para interpretar). Se verifica `log_f` contra `dnorm(log = TRUE)` |
 | `tablas/probabilidades_g_replica1.csv` | Formato largo: `clase`, `g`, `conteo` ($n_{c,g}$), `n_c`, `p` ($\hat p_{c,g}$). 20 filas |
 | `tablas/probabilidades_e_replica1.csv` | Igual para educación: `clase`, `educacion`, `conteo` ($m_{c,e}$), `n_c`, `q`. 16 filas |
-| `tablas/persona_replica1.csv` | Primera persona de prueba ordenada por `id_original`: `id_original`, `age`, `hours_per_week`, `educacion`, `g`, `clase`, `c_previa`, `c_edad`, `c_horas`, `c_educacion`, `c_g`, `D`, `tau`, `pred` |
+| `tablas/persona_replica1.csv` | Primera persona de prueba ordenada por `id_original`: `id_original`, `age`, `hours_per_week`, `educacion`, `g`, `clase`, `c_previa`, `c_edad`, `c_horas`, `c_educacion`, `c_g`, `D`, `l0`, `l1` (recalculados con `puntuar()`), `tau`, `pred` |
 | `tablas/candidatos_replica1.csv` | `umbral[["candidatos"]]` más las columnas `exactitud`, `PPV`, `F1`, `FPR` obtenidas con `indicadores()` sobre sus conteos; se agregan `J_max`, `eps` y `elegido` (lógica) |
 | `figuras/curvas_validacion_replica1.png` | Panel izquierdo: `exactitud`, `TPR`, `TNR`, `PPV`, `F1` y `FPR` en validación frente a los cortes finitos, con una línea vertical en $\tau_1$ y leyenda. Panel derecho, aparte: los mismos indicadores en el corte $+\infty$ (puntos; `PPV` es `NA` allí y se indica) |
 
-Verificaciones: las previas suman 1 y las probabilidades de `g` y de educación suman 1 por clase; en `persona_replica1.csv`, la suma de las cinco contribuciones es igual a `D` y `pred == (D >= tau)`; `candidatos_replica1.csv` tiene un único `elegido` y su `tau` es igual a `umbral[["tau"]]`.
+Verificaciones: las previas suman 1 y las probabilidades de `g` y de educación suman 1 por clase; en `persona_replica1.csv`, la suma de las cinco contribuciones es igual a `D` con la tolerancia relativa, `D == l1 - l0` y `pred == (D >= tau)`; `candidatos_replica1.csv` tiene un único `elegido` y su `tau` es igual a `umbral[["tau"]]`.
 
 ## 4. Decisiones tomadas
 
@@ -405,3 +432,4 @@ Verificaciones: las previas suman 1 y las probabilidades de `g` y de educación 
 - 2026-10-22: `matrices_por_grupo()` devuelve formato largo con columna `g` (factor) y sin nombres de fila, para que `05` la guarde tal cual y `07` apile las réplicas con `rbind` agregando `b`.
 - 2026-10-22: contratos de 06–09 con nombres de archivo, columnas y figuras. Las evidencias que la rúbrica pide para la réplica 1 se reparten así: tamaños, parámetros, densidad, probabilidades, persona y curvas de validación en `09`; composición y marginales por grupo en `07`; Q–Q, dependencias, verificaciones y duplicados en `08`.
 - 2026-10-22: `escribir_csv()` pasa de `06_resumen.R` a `00_utilidades.R`, porque la usan 06–09 y no pueden llamarse entre sí. Recibe la ruta completa para no depender de `RUTAS`. `00_utilidades.R` pasa a reunir utilidades compartidas, no solo estadísticos.
+- 2026-10-22: tolerancias explícitas (sección "Tolerancias numéricas"). Las contribuciones usan $16 \cdot \varepsilon_{\text{mach}} \cdot \max(\lvert\ell_1\rvert, \lvert\ell_0\rvert, 1)$ en lugar de $128 \cdot \varepsilon_{\text{mach}}$ fijo. `08` y `09` recalculan $\ell_c$ con `puntuar()`. `prueba_coincide_*` cuenta personas de prueba. `educacion_g_replica1.csv` se ordena por clase, educación y g.
