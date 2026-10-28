@@ -18,4 +18,4 @@ source("run_all.R")
 - `data/raw/`: datos originales; `data/processed/`: tabla analitica y registro de exclusiones.
 - `output/replicas/`: un `.rds` por replica; `output/tablas/`: csv; `output/figuras/`: png.
 - `logs/`: entorno, RNGkind, semillas, eps.
-- `docs/`: documentacion y rubrica.
+- `docs/`: documentacion y rubrica. Para leer el proyecto: `01_preguntas_respuestas.md`, `02_documentacion_breve.md`, `03_documentacion_tecnica.md`, `04_resultados.md` y `05_evaluacion_resultados.md`; los contratos estan en `arquitectura.md` y el registro por modulo en `bitacora.md`.
