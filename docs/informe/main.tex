@@ -1,0 +1,957 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-tabla,es-lcroman]{babel}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage{geometry,graphicx,booktabs,longtable,tabularx,float,caption}
+\usepackage{xcolor,fancyhdr,hyperref,lscape,listings}
+\geometry{left=25mm,right=25mm,top=25mm,bottom=25mm,headheight=15pt}
+\definecolor{azul}{HTML}{17466B}
+\definecolor{gris}{HTML}{46535D}
+\hypersetup{colorlinks=true,linkcolor=azul,urlcolor=azul,citecolor=azul,
+ pdftitle={Clasificación de ingresos mediante Naive Bayes mixto},
+ pdfauthor={Diego Alvarez, Vicente Matus, Esban Vejar, Daniela Romero, Franco Oyarzo}}
+\pagestyle{fancy}\fancyhf{}
+\fancyhead[L]{\small\textcolor{gris}{INFO-1165 | Prueba Práctica 2}}
+\fancyhead[R]{\small\textcolor{gris}{Naive Bayes mixto}}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+\setlength{\parindent}{0pt}\setlength{\parskip}{6pt}
+\linespread{1.06}
+\setcounter{tocdepth}{2}
+\captionsetup{font=small,labelfont=bf,justification=justified}
+\renewcommand{\arraystretch}{1.16}
+\newcommand{\archivo}[1]{\path{#1}}
+\setlength{\emergencystretch}{2em}
+\newcommand{\NA}{\mathrm{NA}}
+\newcommand{\figuralateral}[4]{%
+\begin{landscape}\ifdefined\pdfpageattr\pdfpageattr{/Rotate 90}\fi
+\begin{figure}[H]\centering
+\includegraphics[width=.97\linewidth,height=120mm,keepaspectratio]{images/#1}
+\caption{#2}\label{#3}
+\end{figure}
+{\small #4\par}
+\end{landscape}\ifdefined\pdfpageattr\pdfpageattr{/Rotate 0}\fi}
+\lstset{basicstyle=\ttfamily\small,breaklines=true,columns=fullflexible,
+ frame=single,backgroundcolor=\color{black!3},rulecolor=\color{black!15},showstringspaces=false}
+
+\begin{document}
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+\centering
+{\large Universidad Católica de Temuco\par}
+{\large Escuela de Ingeniería Informática\par}
+\vspace{17mm}
+{\large Estadística Computacional\par}
+{\large INFO-1165 | Prueba Práctica 2\par}
+\vspace{20mm}
+{\Huge\bfseries\textcolor{azul}{Clasificación de ingresos mediante Naive Bayes mixto}\par}
+\vspace{8mm}
+{\Large Estimación, selección de umbral, estabilidad por submuestreo y análisis de errores por grupo\par}
+\vspace{20mm}
+{\large\bfseries Integrantes\par}
+\vspace{3mm}
+{\large Diego Alvarez\par Vicente Matus\par Esban Vejar\par Daniela Romero\par Franco Oyarzo\par}
+\vfill
+{\large Informe de resultados\par}
+{\large 28 de octubre de 2026\par}
+\end{titlepage}
+\hypersetup{pageanchor=true}
+\pagenumbering{roman}
+\section*{Resumen}
+\addcontentsline{toc}{section}{Resumen}
+Se desarrolló un clasificador Naive Bayes mixto para distinguir registros con ingreso anual superior a USD 50.000 de aquellos con ingreso menor o igual a dicho monto. Se utilizó exclusivamente \archivo{adult.data} del conjunto Adult/Census Income de UCI. La población de trabajo se restringió a registros completos en los campos requeridos y con educación secundaria completa o superior. La tabla analítica quedó compuesta por 28.308 observaciones: 20.711 de clase 0 y 7597 de clase 1.
+
+El procedimiento comprendió 200 réplicas de submuestreo estratificado. En cada una se seleccionaron 6077 observaciones por clase para entrenar, 2830 observaciones para validación y 2833 para prueba. El modelo combinó distribuciones normales para edad y horas semanales con probabilidades categóricas suavizadas para educación y para la categoría conjunta de sexo y grupo racial registrado. El umbral se seleccionó en validación mediante la maximización del índice de Youden y se aplicó sin cambios a la prueba de esa réplica.
+
+En las 200 pruebas, la mediana de exactitud fue 0,73632; la de sensibilidad, 0,75821; la de especificidad, 0,72828; la de valor predictivo positivo, 0,50634; y la de exactitud equilibrada, 0,74184. Los percentiles 2,5 y 97,5 de esta última fueron 0,72096 y 0,75775. Estos valores describen variación entre particiones de la misma tabla y no constituyen, por sí solos, intervalos de confianza poblacionales. El umbral presentó mediana 0,06809, con percentiles -0,21562 y 0,26500.
+
+Se observaron diferencias relevantes de sensibilidad y falsos positivos entre categorías conjuntas. Las tasas de grupos pequeños fueron especialmente inestables y algunas no pudieron estimarse por ausencia de positivos reales en determinadas pruebas. Los gráficos Q-Q mostraron limitaciones de la aproximación normal, particularmente en horas de trabajo. La normalización de probabilidades, la separación de destinos, la reconstrucción del puntaje y la suma de matrices se verificaron en las 200 réplicas. El alcance de los resultados es descriptivo y predictivo dentro de este conjunto histórico filtrado; no permite atribuir efectos causales ni justificar decisiones individuales sobre ingresos.
+
+\textbf{Palabras clave:} clasificación binaria; Naive Bayes mixto; suavizado de Laplace; Youden; submuestreo equilibrado; errores por grupo.
+
+\clearpage\begingroup\small\setlength{\parskip}{0pt}\tableofcontents\endgroup
+\clearpage\begingroup\small\setlength{\parskip}{0pt}\listoftables\endgroup
+\clearpage\begingroup\small\setlength{\parskip}{0pt}\listoffigures\endgroup
+\clearpage\pagenumbering{arabic}
+
+\section{Problema, objetivos y alcance}
+\subsection{Problema de clasificación}
+El problema consiste en asignar una clase de ingreso a partir de características registradas de una persona. Se trata de aprendizaje supervisado porque el ajuste dispone de una etiqueta conocida de ingreso, y de clasificación binaria porque solo se consideran dos resultados posibles:
+\begin{equation}
+C_i=\begin{cases}0,&\text{ingreso anual menor o igual a USD 50.000},\\
+1,&\text{ingreso anual superior a USD 50.000}.\end{cases}
+\end{equation}
+La clase observada $c_i$ proviene del archivo fuente. La clase predicha $\widehat c_i$ resulta de aplicar el modelo y el umbral. Esta distinción permite identificar aciertos y errores. El modelo no estima el ingreso exacto en dólares ni la diferencia monetaria entre una persona y el límite de clasificación.
+
+La elección del enfoque probabilístico permite combinar información numérica y categórica mediante una regla explícita. El interés del proyecto comprende tanto la construcción del clasificador como la variación de sus resultados al modificar el reparto de observaciones. La evaluación por grupo examina en quiénes se concentran distintos tipos de error; una exactitud global aislada no resume ese comportamiento.
+
+\subsection{Objetivo general y objetivos específicos}
+El objetivo general es estimar y evaluar un clasificador Naive Bayes mixto para ingresos anuales en la población analítica definida por la rúbrica, mediante 200 réplicas con entrenamiento equilibrado y selección del umbral en validación.
+
+Los objetivos específicos son:
+\begin{enumerate}
+\item Construir una tabla analítica reproducible, preservando el archivo fuente y la identificación original de cada registro.
+\item Estimar manualmente las probabilidades previas, los parámetros normales y las probabilidades categóricas suavizadas de cada réplica.
+\item Obtener puntajes en escala logarítmica y seleccionar un umbral por réplica mediante el índice de Youden.
+\item Evaluar la regla fijada en datos de prueba y describir las distribuciones de umbrales e indicadores.
+\item Analizar los errores por categoría conjunta de sexo y grupo registrado, junto con sus denominadores y valores no estimables.
+\item Examinar los supuestos aproximados del modelo y verificar la consistencia numérica y la trazabilidad de los cálculos.
+\end{enumerate}
+
+\subsection{Alcance de la interpretación}
+Los datos corresponden a información estadounidense de 1994 difundida en UCI \cite{uci}. El análisis se refiere a la tabla filtrada utilizada, con sus etiquetas y convenciones históricas. No representa directamente a la población chilena actual. Tampoco se incorporan los pesos \archivo{fnlwgt} en los cálculos, de modo que las frecuencias se interpretan como proporciones de registros del archivo y no como estimaciones ponderadas de una población nacional.
+
+Las categorías registradas de sexo y raza se conservan para reproducir el ejercicio y evaluar errores. Sus asociaciones con el ingreso no establecen una explicación causal, una característica biológica ni un criterio normativo de decisión. El clasificador aprendido refleja patrones del conjunto y del procedimiento de balanceo. No se ha realizado validación externa o temporal.
+
+\section{Datos y población analítica}
+\subsection{Fuente, unidad de análisis y variables}
+La unidad de análisis es una fila de \archivo{adult.data}. Se preservó el archivo original y se utilizó \archivo{adult.names} como diccionario. Aunque Adult incluye otros archivos, este proyecto utiliza únicamente el archivo indicado por la rúbrica; no se añadieron registros de \archivo{adult.test}.
+
+\begin{table}[H]\centering\small
+\caption{Variables utilizadas y función dentro del análisis.}\label{tab:variables}
+\begin{tabularx}{\linewidth}{l c X}\toprule
+Campo original & Columna & Función \\\midrule
+\archivo{age} & 1 & Predictor numérico: edad en años.\\
+\archivo{hours-per-week} & 13 & Predictor numérico: horas de trabajo por semana.\\
+\archivo{education} & 4 & Predictor categórico de ocho niveles admitidos.\\
+\archivo{sex}, \archivo{race} & 10, 9 & Forman el predictor conjunto $G=(S,R)$, con diez categorías.\\
+\archivo{education-num} & 5 & Se utiliza para filtrar educación secundaria completa o superior.\\
+\archivo{income} & 15 & Etiqueta observada de ingreso; determina $c_i$.\\
+\archivo{id_original} & Generada & Localiza la fila original; no participa como predictor.\\\bottomrule
+\end{tabularx}\end{table}
+
+Se distinguen cuatro bloques predictores: edad, horas, educación y $G$. El código educativo numérico no se añade como quinto predictor, ya que su función en este ejercicio es delimitar la población. La clase real y el identificador tampoco se utilizan para calcular el puntaje de una nueva observación.
+
+\subsection{Limpieza y filtro educativo}
+Primero se eliminaron espacios iniciales y finales de las etiquetas y se reconocieron campos vacíos o signos de interrogación como faltantes. Después se excluyeron filas incompletas en cualquiera de los campos necesarios para predicción, clase o filtro. Finalmente se conservó \archivo{education-num} $\geq 9$.
+
+El registro de depuración fue: 32.561 filas originales, cero exclusiones por faltantes en campos requeridos, 4253 exclusiones educativas y 28.308 filas finales. La ausencia de exclusiones por faltantes requeridos no significa que todas las columnas originales estén completas; hay campos que no intervienen en este proyecto.
+
+Los niveles admitidos son \archivo{HS-grad}, \archivo{Some-college}, \archivo{Assoc-voc}, \archivo{Assoc-acdm}, \archivo{Bachelors}, \archivo{Masters}, \archivo{Prof-school} y \archivo{Doctorate}. La etiqueta \archivo{12th} no acredita graduación secundaria en la codificación del archivo y queda excluida. El conjunto de educación tiene tamaño $K_E=8$.
+
+El predictor $G$ combina los niveles de sexo registrado, \archivo{Female} y \archivo{Male}, con cinco categorías raciales registradas. Estas son \archivo{White}, \archivo{Black}, \archivo{Asian-Pac-Islander}, \archivo{Amer-Indian-Eskimo} y \archivo{Other}. Su conjunto tiene tamaño $K_G=10$. Se mantienen estos niveles fijos en todas las réplicas, incluso si alguna combinación presenta conteo cero en una muestra.
+
+\subsection{Composición y desbalance de clases}
+La tabla contiene $N_0=20711$ registros de clase 0 y $N_1=7597$ de clase 1. La proporción de clase 1 es $7597/28308=0,268369$, aproximadamente 26,84\%. La clase 0 representa aproximadamente 73,16\%. Por ello, un clasificador que predice siempre 0 puede alcanzar una exactitud elevada sin detectar ningún ingreso alto.
+
+Este desbalance motiva la distinción entre exactitud, sensibilidad y exactitud equilibrada. El entrenamiento se equilibra por diseño, mientras validación y prueba conservan aproximadamente la composición original por clase. La proporción positiva del entrenamiento, 0,5, no debe confundirse con la prevalencia de la tabla ni con la de cada grupo.
+
+\section{Fundamento probabilístico del modelo}
+\subsection{Probabilidad condicional, Bayes y clasificación}
+Para eventos $A$ y $B$, con $P(B)>0$, la probabilidad condicional es $P(A\mid B)=P(A\cap B)/P(B)$. El teorema de Bayes relaciona la probabilidad de una clase después de observar predictores con su probabilidad previa y con la distribución de esos predictores dentro de la clase. Si $X=(A,H,E,G)$ representa edad, horas, educación y categoría conjunta, la expresión formal es
+\begin{equation}
+P(C=c\mid X=x)=\frac{\pi_c\,p(x\mid C=c)}{\sum_{k=0}^1\pi_k\,p(x\mid C=k)},
+\end{equation}
+donde $p$ representa una densidad conjunta respecto de los componentes continuos y una masa respecto de los categóricos. La previa $\pi_c$ expresa la frecuencia de la clase antes de incorporar los predictores; la verosimilitud $p(x\mid C=c)$ mide la compatibilidad del perfil con la distribución de esa clase; la posterior combina ambas fuentes.
+
+El denominador es común a las dos clases para una misma persona. Por eso puede omitirse al comparar sus puntajes. Esto simplifica la decisión, aunque no convierte el puntaje sin normalizar en una probabilidad.
+
+\subsection{Supuesto naive e independencia condicional}
+La aproximación Naive Bayes factoriza la distribución de los predictores dentro de cada clase \cite{nb}. En este proyecto se supone aproximadamente que
+\begin{equation}\label{eq:factorizacion}
+p(a,h,e,g\mid C=c)\approx f_{c,a}(a)\,f_{c,h}(h)\,q_{c,e}\,p_{c,g}.
+\end{equation}
+La condición es ``dada la clase''. No se requiere que edad, horas, educación y $G$ sean independientes en la mezcla total de personas. Tampoco basta que una correlación de Pearson sea pequeña: dicha correlación solo caracteriza asociación lineal entre dos variables numéricas, mientras la factorización exige una separación más fuerte de la distribución conjunta.
+
+El uso de $G=(S,R)$ constituye una decisión relevante: sexo y grupo registrado se modelan conjuntamente dentro de ese bloque. No se impone una factorización adicional $P(S,R\mid C)=P(S\mid C)P(R\mid C)$. En cambio, la aproximación sí separa $G$ de educación, edad y horas, dada la clase.
+
+El término ``mixto'' se refiere al uso simultáneo de componentes numéricos y categóricos con modelos distintos. No significa que se ajusten varios clasificadores externos o que se utilice una mezcla de distribuciones normales para cada predictor. La implementación utiliza una normal por clase y predictor numérico, junto con distribuciones categóricas suavizadas.
+
+\subsection{Estimación numérica y distribución normal}
+Para la clase $c$ del entrenamiento de la réplica $b$, con tamaño $n_c^{(b)}$, se calcula
+\begin{align}
+\widehat\mu_{c,j}^{(b)}&=\frac{1}{n_c^{(b)}}\sum_{i\in T_b:c_i=c}z_{i,j},\\
+\widehat\sigma_{c,j}^{(b)}&=\sqrt{\frac{\sum_{i\in T_b:c_i=c}(z_{i,j}-\widehat\mu_{c,j}^{(b)})^2}{n_c^{(b)}-1}}.
+\end{align}
+La desviación estándar se expresa en las mismas unidades del predictor. El denominador $n_c-1$ corresponde a la desviación muestral solicitada. La corrección produce una varianza insesgada bajo los supuestos habituales; no implica automáticamente que su raíz sea insesgada.
+
+La densidad normal y su logaritmo son
+\begin{align}
+f_{c,j}^{(b)}(z)&=\frac{1}{\widehat\sigma_{c,j}^{(b)}\sqrt{2\pi}}\exp\left[-\frac12\left(\frac{z-\widehat\mu_{c,j}^{(b)}}{\widehat\sigma_{c,j}^{(b)}}\right)^2\right],\\
+\log f_{c,j}^{(b)}(z)&=-\log\widehat\sigma_{c,j}^{(b)}-\tfrac12\log(2\pi)-\tfrac12\left(\frac{z-\widehat\mu_{c,j}^{(b)}}{\widehat\sigma_{c,j}^{(b)}}\right)^2.\label{eq:lognormal}
+\end{align}
+Se calculan cuatro medias y cuatro desviaciones por réplica: edad y horas dentro de cada una de las dos clases. La estimación se detiene si alguna clase tiene menos de dos observaciones o una desviación nula, ya que la expresión anterior no quedaría definida. No se incorpora una constante arbitraria para ocultar ese caso.
+
+Edad y horas se registran en enteros, pero se aproximan mediante distribuciones continuas. Esta simplificación debe evaluarse mediante los diagnósticos. No se interpreta como una descripción exacta del mecanismo que generó los registros.
+
+\subsection{Densidad y probabilidad acumulada}
+Una densidad $f(z)$ describe concentración local y puede tener unidades, como año$^{-1}$ para edad. No es una probabilidad puntual; en una distribución continua $P(Z=z)=0$. La función acumulada $F(z)=P(Z\leq z)$ es el área bajo la densidad hasta $z$, con valores entre cero y uno. La probabilidad de un intervalo es $F(v)-F(u)$.
+
+El puntaje usa la densidad normal o, equivalentemente, su logaritmo; no usa la acumulada. La acumulada se incluye como apoyo interpretativo y no representa $P(C=1\mid X)$. Esta diferencia evita confundir ``porcentaje de edades hasta 37 dentro de una clase'' con ``probabilidad de ingreso alto para una persona de 37 años''.
+
+\subsection{Probabilidades categóricas y suavizado de Laplace}
+Se define $n_{c,g}^{(b)}$ como el conteo del entrenamiento con clase $c$ y categoría $g$, y $m_{c,e}^{(b)}$ como el conteo con clase $c$ y educación $e$. Con suavizado de Laplace de parámetro uno,
+\begin{equation}\label{eq:laplace}
+\widehat p_{c,g}^{(b)}=\frac{n_{c,g}^{(b)}+1}{n_c^{(b)}+10},\qquad
+\widehat q_{c,e}^{(b)}=\frac{m_{c,e}^{(b)}+1}{n_c^{(b)}+8}.
+\end{equation}
+Agregar uno a cada categoría evita probabilidades nulas y logaritmos de cero en categorías admitidas. Como los conteos originales suman $n_c$, la suma de los numeradores suavizados es $n_c+K$; por ello se mantiene la normalización. El suavizado no elimina diferencias entre grupos, no garantiza independencia y no soluciona por sí solo la escasez de datos.
+
+La previa se estima como $\widehat\pi_c^{(b)}=n_c^{(b)}/(n_0^{(b)}+n_1^{(b)})$. Dado el balanceo, ambas previas son 0,5. No se reemplazan por las prevalencias de prueba ni se ajustan usando etiquetas externas al entrenamiento.
+
+\subsection{Puntaje logarítmico y regla de decisión}
+El log-puntaje de la clase $c$ para la persona $i$ es
+\begin{equation}\label{eq:puntaje}
+\ell_{c,i}^{(b)}=\log\widehat\pi_c^{(b)}+\log f_{c,a}^{(b)}(a_i)+\log f_{c,h}^{(b)}(h_i)+\log\widehat q_{c,e_i}^{(b)}+\log\widehat p_{c,g_i}^{(b)}.
+\end{equation}
+Se define la diferencia $D_i^{(b)}=\ell_{1,i}^{(b)}-\ell_{0,i}^{(b)}$ y se clasifica mediante
+\begin{equation}\label{eq:decision}
+\widehat c_i^{(b)}=\mathbf 1\{D_i^{(b)}\geq\tau_b\}.
+\end{equation}
+La igualdad pertenece a clase 1. Un $D$ alto favorece relativamente a esa clase según el modelo. Un log-puntaje negativo es válido y no significa una probabilidad negativa. Los logaritmos convierten productos en sumas y reducen el riesgo de subdesbordamiento que aparece al multiplicar números pequeños. La log-densidad se calcula directamente con la ecuación \eqref{eq:lognormal}.
+
+El valor $D$ se puede descomponer en cinco contribuciones, una por previa y una por bloque predictor. El signo de una contribución muestra preferencia relativa entre las dos distribuciones ajustadas, sin representar un efecto causal. La contribución previa se anula al ser ambas previas iguales.
+
+Aunque una transformación logística de $D$ produce la posterior interna del modelo bajo sus propias previas y supuestos, no garantiza probabilidades calibradas para la población original. La regla evaluada en este proyecto opera directamente con $D$ y un umbral elegido en validación. Un umbral cero correspondería a comparar los puntajes sin desplazamiento; no tiene por qué maximizar Youden.
+
+\section{Diseño de las réplicas y selección del umbral}
+\subsection{Partición estratificada y entrenamiento equilibrado}
+Se utilizaron $B=200$ réplicas y la semilla
+\begin{equation}
+\mathrm{semilla}_b=20261021+b-1,\qquad b=1,\ldots,200.
+\end{equation}
+Cada réplica comienza nuevamente desde la tabla analítica completa. Dentro de cada clase se sortean observaciones sin reemplazo: $\lfloor0,8N_c\rfloor$ quedan disponibles para entrenar, $\lfloor0,1N_c\rfloor$ se asignan a validación y el resto a prueba. Luego se define
+\begin{equation}
+n^*=\min\{\lfloor0,8N_0\rfloor,\lfloor0,8N_1\rfloor\}=6077
+\end{equation}
+y se seleccionan exactamente $n^*$ observaciones de cada clase disponible. Las observaciones disponibles no seleccionadas se registran aparte. No se reasignan a validación o prueba.
+
+\begin{table}[H]
+\centering
+\caption[Distribución de las observaciones por clase y destino en la réplica 1.]{Distribución de las observaciones por clase y destino en la réplica 1. Los tamaños se mantienen en las 200 réplicas. El disponible es una etapa previa y no se suma como destino final.}\label{tab:tamanos}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrrr}
+\toprule
+Clase & $N_c$ & Disponible & Entrenamiento & Validación & Prueba & Sobrantes \\
+\midrule
+0 & 20711 & 16568 & 6077 & 2071 & 2072 & 10491 \\
+1 & 7597 & 6077 & 6077 & 759 & 761 & 0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+El entrenamiento final contiene 12.154 personas, validación 2830, prueba 2833 y los sobrantes 10.491. Estos cuatro destinos suman 28.308. Los tamaños por clase permanecen constantes; cambian las identidades elegidas. La disyunción se exige dentro de cada réplica. La misma fila puede aparecer en réplicas diferentes, por lo que las réplicas comparten información.
+
+El entrenamiento estima los parámetros; validación selecciona el umbral utilizando esos parámetros; prueba evalúa la regla ya fijada. Ajustar parámetros o modificar el corte a partir del resultado de prueba introduciría selección sobre la evaluación. No se concatenan las 200 pruebas como si fueran personas nuevas e independientes.
+
+\subsection{Candidatos de umbral}
+Sean $u_1<\cdots<u_m$ los valores distintos de $D$ en validación. Los candidatos son
+\begin{equation}
+\mathcal T_b=\{u_1,\;u_1/2+u_2/2,\ldots,u_{m-1}/2+u_m/2,\;+\infty\}.
+\end{equation}
+El menor puntaje produce todas las predicciones positivas. El extremo $+\infty$ produce todas negativas porque los puntajes son finitos. Entre dos valores distintos consecutivos no cambia la clasificación de los registros de validación. Por ello basta un representante de cada separación.
+
+La expresión $u/2+v/2$ evita sumar primero dos valores grandes. Si el redondeo no deja el resultado en el intervalo $(u,v]$, se usa $v$ como representante válido para la regla $D\geq\tau$. No se añade una tolerancia al comparar los puntajes individuales con el corte.
+
+\subsection{Youden y desempate numérico}
+Para cada candidato se calculan sensibilidad y especificidad en validación y se obtiene
+\begin{equation}\label{eq:youden}
+J(\tau)=\mathrm{TPR}(\tau)+\mathrm{TNR}(\tau)-1.
+\end{equation}
+Se maximiza $J$. Como $\mathrm{BA}=(\mathrm{TPR}+\mathrm{TNR})/2=(J+1)/2$, maximizar Youden equivale a maximizar la exactitud equilibrada en esa validación. No equivale necesariamente a maximizar exactitud, precisión positiva o F1.
+
+Se calcula $J_{\max}$ y se consideran empatados los candidatos con $|J(\tau)-J_{\max}|\leq\varepsilon$, donde $\varepsilon$ es el épsilon de máquina de R: aproximadamente $2,220446\times10^{-16}$. Entre los empatados se elige el menor $|\tau|$ y, si aún persiste el empate, el menor $\tau$. La tolerancia se aplica a Youden, no a la distancia entre cortes. Se conservan candidatos, indicadores, máximo, épsilon y elección para cada réplica.
+
+Una vez elegido $\tau_b$, el modelo y el corte se aplican a prueba sin una nueva búsqueda. Cada réplica tiene su propio umbral; la mediana de los 200 cortes es un resumen de variación y no un reemplazo automático de la regla ya evaluada.
+
+\subsection{Matrices de confusión e indicadores}
+Se considera positiva la clase 1. Los verdaderos positivos (TP) son ingresos altos correctamente detectados; los falsos negativos (FN), ingresos altos predichos como bajos. Los verdaderos negativos (TN) son ingresos no superiores al límite correctamente clasificados; los falsos positivos (FP), registros de clase 0 predichos como 1.
+
+\begin{table}[H]\centering\small
+\caption{Definiciones y denominadores de los nueve indicadores.}\label{tab:formulas}
+\begin{tabularx}{\linewidth}{l l X}\toprule
+Indicador & Expresión & Interpretación \\\midrule
+Exactitud & $(TP+TN)/n$ & Fracción total de predicciones correctas.\\
+TPR & $TP/(TP+FN)$ & Fracción de positivos reales detectados.\\
+TNR & $TN/(TN+FP)$ & Fracción de negativos reales reconocidos.\\
+PPV & $TP/(TP+FP)$ & Fracción de predichos positivos que son reales.\\
+F1 & $2TP/(2TP+FP+FN)$ & Compromiso entre PPV y sensibilidad.\\
+FPR & $FP/(TN+FP)$ & Fracción de negativos reales que se marcan positivos.\\
+FNR & $FN/(TP+FN)$ & Fracción de positivos reales que no se detectan.\\
+BA & $(TPR+TNR)/2$ & Promedio del desempeño dentro de ambas clases.\\
+J & $TPR+TNR-1$ & Sensibilidad menos falsos positivos.\\\bottomrule
+\end{tabularx}\end{table}
+
+TPR y PPV responden preguntas diferentes: el primero condiciona en la clase observada y el segundo en la predicción. En clases desbalanceadas, confundirlos altera sustancialmente la interpretación. FPR es $1-TNR$ y FNR es $1-TPR$ cuando los denominadores respectivos son positivos.
+
+Si un cociente tiene denominador cero, se registra $\NA$ y no cero. Por ejemplo, el candidato $+\infty$ no predice positivos y su PPV es no estimable. BA y J requieren que las dos tasas que los componen estén definidas. En la evaluación global ambas clases están presentes, pero en ciertos grupos pequeños puede no haber positivos reales.
+
+\subsection{Resumen entre réplicas y percentiles tipo 7}
+Para cada umbral e indicador se informan número de valores estimables $r$, media, desviación muestral, mediana y percentiles 2,5 y 97,5. Los $\NA$ no se convierten en ceros. Si $r=1$, la desviación no se estima; si $r=0$, los estadísticos de la variable quedan no estimables.
+
+Para valores ordenados $x_{(1)}\leq\cdots\leq x_{(r)}$, el percentil tipo 7 utiliza \cite{quantile}
+\begin{equation}
+h=1+(r-1)p,\quad j=\lfloor h\rfloor,\quad\gamma=h-j,\quad
+Q(p)=(1-\gamma)x_{(j)}+\gamma x_{(j+1)},
+\end{equation}
+con los ajustes de extremos correspondientes. Para $r=200$, las posiciones de $p=0,025$ y $p=0,975$ son 5,975 y 195,025. Esto explica que un percentil pueda no coincidir con ningún valor observado.
+
+El intervalo entre estos percentiles resume el 95\% central descriptivo de las realizaciones del procedimiento. Las réplicas se obtienen de la misma tabla y comparten personas; no constituyen 200 estudios independientes. Por eso no se atribuye a esos extremos una cobertura de confianza poblacional sin un argumento inferencial adicional.
+
+\section{Resultados de la primera réplica}
+\subsection{Parámetros ajustados}
+La primera réplica se utiliza como ejemplo auditable, sin sustituir el análisis global. Corresponde a la semilla 20261021. Las estimaciones se obtienen exclusivamente de su entrenamiento equilibrado.
+
+\begin{table}[H]
+\centering
+\caption[Parámetros del entrenamiento equilibrado de la réplica 1.]{Parámetros del entrenamiento equilibrado de la réplica 1. Edad en años y horas en horas por semana. Subíndices: a, edad; h, horas.}\label{tab:parametros}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrrr}
+\toprule
+Clase & $n_c$ & $\widehat\pi_c$ & $\widehat\mu_{c,a}$ & $\widehat\sigma_{c,a}$ & $\widehat\mu_{c,h}$ & $\widehat\sigma_{c,h}$ \\
+\midrule
+0 & 6077 & 0,5000 & 36,8789 & 13,3548 & 39,3671 & 12,1035 \\
+1 & 6077 & 0,5000 & 44,1450 & 10,4957 & 45,4119 & 11,0004 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+En esta réplica, la clase 1 presenta una media de edad aproximadamente 7,27 años mayor y una media de horas aproximadamente 6,04 horas superior a la clase 0. Estas diferencias describen los registros de entrenamiento; no implican que aumentar la edad o las horas cause un ingreso alto. Las desviaciones indican dispersión dentro de cada clase y muestran un solapamiento importante de los predictores.
+
+Las tablas completas de probabilidades categóricas se incluyen en el anexo. A modo de reconstrucción, \archivo{Male/Black} tiene conteos 309 y 217 en clases 0 y 1. Las probabilidades suavizadas son $310/6087=0,050928$ y $218/6087=0,035814$. Para \archivo{Some-college}, los conteos son 1776 y 1107, con probabilidades $1777/6085=0,292030$ y $1108/6085=0,182087$.
+
+En \archivo{Bachelors}, los conteos son 949 y 1778; las probabilidades son $950/6085=0,156122$ y $1779/6085=0,292358$. El contraste ilustra que las probabilidades se condicionan en la clase de entrenamiento. No representan la probabilidad directa de pertenecer a clase 1 cuando se observa ese nivel educativo.
+
+\begin{table}[H]
+\centering
+\caption[Normal ajustada a edad, evaluada en 37 años, por clase de entrenamiento de la réplica 1.]{Normal ajustada a edad, evaluada en 37 años, por clase de entrenamiento de la réplica 1. La densidad tiene unidades año$^{-1}$ y la acumulada es una probabilidad.}\label{tab:densidad}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrr}
+\toprule
+Clase & $z$ & $\log f(z)$ & $f(z)$ & $F(z)$ \\
+\midrule
+0 & 37 & -3,510855 & 0,02987137 & 0,50361789 \\
+1 & 37 & -3,501617 & 0,03014859 & 0,24801455 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Para clase 1, $F(37)\approx0,248015$ indica que cerca de 24,80\% del área de la normal ajustada de edad queda hasta 37 años. No indica una probabilidad de 24,80\% de ingreso alto. Las dos densidades en 37 son parecidas y la contribución de edad al log-cociente resulta pequeña.
+
+\subsection{Reconstrucción de una predicción individual}
+El ejemplo conserva el identificador original 11. Corresponde a un registro de 37 años, 80 horas semanales, educación \archivo{Some-college}, categoría \archivo{Male/Black} y clase observada 1. Sus cinco contribuciones al puntaje son:
+\begin{table}[H]\centering\small
+\caption{Descomposición del puntaje del registro original 11, réplica 1.}\label{tab:persona}
+\begin{tabular}{lr}\toprule
+Término & Contribución a $D=\ell_1-\ell_0$\\\midrule
+Log-razón de previas & $0,000000000$\\
+Log-razón de densidades de edad & $+0,009237430$\\
+Log-razón de densidades de horas & $+0,787499905$\\
+Log-razón de probabilidades educativas & $-0,472369961$\\
+Log-razón de probabilidades de $G$ & $-0,352077235$\\\midrule
+Total $D$ & $-0,027709861$\\\bottomrule
+\end{tabular}\end{table}
+
+Los log-puntajes son $\ell_0=-17,459816893$ y $\ell_1=-17,487526754$. Su diferencia coincide con $D$. Las horas favorecen relativamente a clase 1, pero educación y $G$ aportan más en sentido contrario. No se atribuye a estos términos un efecto causal de las características de la persona.
+
+Como $D=-0,027709861<\tau_1=0,099101246$, se predice clase 0. Dado que la etiqueta observada es 1, el caso constituye un falso negativo. La reconstrucción relaciona parámetros, valores observados, contribuciones, corte y clasificación; no depende de interpretar visualmente un gráfico.
+
+\subsection{Umbral de validación y lectura de sus curvas}
+En validación se obtuvieron 1855 puntajes distintos y 1856 candidatos. El criterio y desempate seleccionaron un único corte $\tau_1=0,099101246$. En ese corte, la matriz de validación tuvo $TN=1541$, $FP=530$, $FN=181$ y $TP=578$. De ella se obtiene $TPR=0,761528$, $TNR=0,744085$ y $J_{\max}=0,505613$.
+
+La figura \ref{fig:curvas} presenta seis indicadores en función de los candidatos finitos en el panel izquierdo. Su eje horizontal está en log-razón y su eje vertical en proporción. La línea vertical identifica el corte elegido por Youden; no implica que las seis curvas alcancen allí su máximo. El panel derecho muestra aparte el extremo infinito: todas las predicciones son cero, TNR vale uno, TPR y FPR valen cero, F1 vale cero y PPV queda no estimable. Su exactitud corresponde a la proporción de clase 0 de validación, aproximadamente 0,7318. Este candidato se conserva además en la tabla completa y no ocupa una posición finita en el eje izquierdo.
+
+Al elevar el corte disminuye o se mantiene el número de predicciones positivas. En consecuencia, TPR y FPR no aumentan, mientras TNR no disminuye. PPV, F1 y exactitud no tienen por qué variar de manera monótona. Las formas escalonadas o sus segmentos gráficos se deben a que las predicciones cambian cuando el corte atraviesa puntajes observados.
+
+\figuralateral{curvas_validacion_replica1.png}{Indicadores en validación de la réplica 1 frente a los candidatos finitos de umbral. La marca vertical corresponde al corte elegido. El candidato $+\infty$ permanece documentado en la tabla de candidatos.}{fig:curvas}{Fuente: salida original del proyecto. Se muestran exactitud, TPR, TNR, PPV, F1 y FPR. El criterio de selección es Youden, calculado a partir de TPR y TNR.}
+
+\subsection{Evaluación en prueba}
+La misma regla se aplicó a las 2833 observaciones de prueba, sin reestimar el corte. La matriz obtenida fue:
+\begin{table}[H]\centering
+\caption{Matriz de confusión en prueba de la réplica 1. Filas: clase observada; columnas: clase predicha.}\label{tab:matriz1}
+\begin{tabular}{lrrr}\toprule
+ & $\widehat C=0$ & $\widehat C=1$ & Total\\\midrule
+$C=0$ & $TN=1552$ & $FP=520$ & 2072\\
+$C=1$ & $FN=186$ & $TP=575$ & 761\\\midrule
+Total & 1738 & 1095 & 2833\\\bottomrule
+\end{tabular}\end{table}
+
+\begin{table}[H]
+\centering
+\caption[Indicadores en las 2833 personas de prueba de la réplica 1.]{Indicadores en las 2833 personas de prueba de la réplica 1. Las tasas se expresan como proporciones y porcentajes; J se informa únicamente en su escala original.}\label{tab:metricas1}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrr}
+\toprule
+Indicador & Valor & Porcentaje \\
+\midrule
+Exactitud & 0,750794 & 75,08\% \\
+Sensibilidad (TPR) & 0,755585 & 75,56\% \\
+Especificidad (TNR) & 0,749035 & 74,90\% \\
+Valor predictivo positivo (PPV) & 0,525114 & 52,51\% \\
+F1 & 0,619612 & 61,96\% \\
+Falsos positivos (FPR) & 0,250965 & 25,10\% \\
+Falsos negativos (FNR) & 0,244415 & 24,44\% \\
+Exactitud equilibrada (BA) & 0,752310 & 75,23\% \\
+Youden (J) & 0,504620 & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+La exactitud $2127/2833=0,750794$ indica que se clasificó correctamente cerca de 75,08\% de la prueba. La sensibilidad $575/761=0,755585$ indica que se detectó aproximadamente 75,56\% de los ingresos altos. El PPV $575/1095=0,525114$ indica que solo cerca de 52,51\% de los predichos positivos correspondió a ingresos altos reales. Por tanto, una sensibilidad próxima a tres cuartos no equivale a que tres cuartos de las alertas positivas sean correctas.
+
+Los 520 falsos positivos superan a los 186 falsos negativos en cantidad absoluta, pero sus tasas utilizan bases distintas. La FPR es aproximadamente 25,10\% de 2072 negativos reales; la FNR, aproximadamente 24,44\% de 761 positivos reales. El índice de Youden en prueba es 0,504620, distinto de su valor de validación porque se evalúa sobre otras personas.
+
+\section{Estabilidad en las 200 réplicas}
+\subsection{Resumen global y comparación de indicadores}
+Cada fila de \archivo{replicas_indicadores.csv} corresponde a un modelo, un umbral de validación y una prueba asociados. La tabla \ref{tab:resumen} resume esos 200 resultados sin mezclar las matrices en una única muestra artificial.
+
+\begin{table}[H]
+\centering
+\caption[Resumen de los 200 umbrales de validación y de los indicadores de prueba asociados.]{Resumen de los 200 umbrales de validación y de los indicadores de prueba asociados. Los indicadores están en escala de proporción; J, en su escala original; el umbral, en log-razón. Percentiles descriptivos tipo 7.}\label{tab:resumen}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrrr}
+\toprule
+Variable & $r$ & Media & Desv. est. & Mediana & $P_{2,5}$ & $P_{97,5}$ \\
+\midrule
+$\tau$ & 200 & 0,04825 & 0,13141 & 0,06809 & -0,21562 & 0,26500 \\
+exactitud & 200 & 0,73267 & 0,01745 & 0,73632 & 0,69184 & 0,75789 \\
+TPR & 200 & 0,75955 & 0,03267 & 0,75821 & 0,69248 & 0,81738 \\
+TNR & 200 & 0,72279 & 0,03282 & 0,72828 & 0,64860 & 0,77133 \\
+PPV & 200 & 0,50304 & 0,02090 & 0,50634 & 0,45858 & 0,53490 \\
+F1 & 200 & 0,60439 & 0,01198 & 0,60622 & 0,58011 & 0,62651 \\
+FPR & 200 & 0,27721 & 0,03282 & 0,27172 & 0,22867 & 0,35140 \\
+FNR & 200 & 0,24045 & 0,03267 & 0,24179 & 0,18262 & 0,30752 \\
+BA & 200 & 0,74117 & 0,00961 & 0,74184 & 0,72096 & 0,75775 \\
+J & 200 & 0,48234 & 0,01922 & 0,48368 & 0,44191 & 0,51551 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Los diez resúmenes cuentan con $r=200$ valores estimables. La mediana de BA es aproximadamente 74,18\%, con un intervalo descriptivo central entre 72,10\% y 75,78\%. Este comportamiento sugiere que la capacidad de reconocer ambas clases permanece relativamente estable dentro del diseño de submuestreo utilizado. No demuestra que un nuevo contexto histórico o una población distinta produzcan resultados en el mismo rango.
+
+La sensibilidad mediana, 75,82\%, supera a la especificidad mediana, 72,83\%. La FPR mediana es 27,17\% y la FNR mediana, 24,18\%. La relación complementaria de estas tasas debe distinguirse de sus cantidades absolutas. La mediana del PPV, 50,63\%, muestra que la identificación positiva conserva un volumen considerable de falsas alarmas, aun cuando la sensibilidad es mayor que 75\%.
+
+La desviación estándar de BA, aproximadamente 0,00961, es menor que las de sensibilidad y especificidad por separado, cercanas a 0,0327 y 0,0328. No basta para afirmar que ambos componentes sean constantes: un corte más permisivo puede favorecer sensibilidad y perjudicar especificidad, manteniendo un promedio parecido.
+
+\subsection{Referencia de clase mayoritaria}
+Como comprobación interpretativa complementaria, se evaluó sobre las mismas etiquetas de prueba la regla constante $\widehat C=0$. Su exactitud es $2072/2833=0,731380$ en todas las réplicas porque los tamaños por clase no varían. Su sensibilidad es cero, su especificidad uno y su BA es 0,5. Su PPV es no estimable porque no genera predicciones positivas.
+
+La exactitud media de Naive Bayes, 0,732667, supera a esa referencia en aproximadamente 0,001287, es decir, 0,129 puntos porcentuales. Su mediana de exactitud supera la referencia en aproximadamente 0,494 puntos porcentuales. Estas diferencias son descriptivas y no se presentan como una prueba de significación. La mejora más clara corresponde a BA: su media es 0,741171 frente a 0,5 de la regla constante, a cambio de aceptar falsos positivos para detectar positivos reales.
+
+Esta comparación explica por qué la utilidad del procedimiento no debe justificarse únicamente con una exactitud próxima a 73\%. El criterio de selección adoptado es Youden, que pondera el reconocimiento de las dos clases mediante tasas condicionadas y no mediante el peso mayoritario de la clase 0.
+
+\subsection{Distribución de los umbrales}
+La mediana del corte es 0,068093, la media 0,048248 y su desviación 0,131412. Los cortes observados van aproximadamente de -0,323096 a 0,319535; los percentiles centrales son -0,215618 y 0,264997. La presencia de cortes a ambos lados de cero indica que la selección depende de la realización de entrenamiento y validación.
+
+En la figura \ref{fig:hist}, el eje horizontal corresponde a $\tau$ y el vertical al número de réplicas dentro de cada intervalo del histograma. Una barra alta representa una región frecuente del corte, no una cantidad de personas ni una probabilidad individual de ingreso. El ancho de los intervalos determina parte de la apariencia del histograma.
+
+La variación del umbral combina cambios del modelo entrenado y del conjunto de validación. No se atribuye exclusivamente a una fuente. Tampoco se propone el promedio o la mediana del corte como un modelo final validado: una regla final requeriría explicitar su entrenamiento y su evaluación independiente.
+
+\figuralateral{hist_tau.png}{Distribución de los 200 umbrales elegidos en validación. Eje horizontal en escala de log-razón; eje vertical en frecuencia de réplicas.}{fig:hist}{Fuente: salida original del proyecto. La distribución describe sensibilidad del procedimiento a la partición de esta misma tabla; sus percentiles no son límites de confianza de un umbral poblacional.}
+
+\subsection{Histogramas y diagramas de caja de indicadores}
+La figura \ref{fig:paneles} permite observar la forma de las distribuciones del umbral y de siete indicadores de prueba. Cada observación subyacente es una réplica. Los ejes horizontales corresponden a proporciones para exactitud, TPR, TNR, PPV, F1 y BA; el umbral se muestra en log-razón y J en su escala original. El eje vertical registra frecuencia de réplicas. La línea azul marca la mediana y la franja sombreada delimita los percentiles 2,5 y 97,5. Un histograma estrecho indica menor variación de esa cantidad dentro del diseño, sin demostrar ausencia de sesgo.
+
+La figura \ref{fig:box} presenta medianas y dispersión de forma compacta. En la convención habitual de R, la línea interior corresponde a la mediana, la caja a los cuartiles y los bigotes se extienden hasta observaciones dentro de 1,5 veces el rango intercuartílico. Los puntos exteriores son valores alejados respecto de esa regla gráfica; no son automáticamente datos erróneos. Los bigotes no representan los percentiles 2,5 y 97,5 de la tabla.
+
+La comparación debe considerar el significado de cada eje: en TPR, TNR, PPV, F1 y BA un valor mayor suele corresponder a mejor desempeño; en FPR y FNR un valor menor es preferible. Youden tiene su escala propia y aparece en los paneles, pero no en este diagrama de cajas. No corresponde ordenar todos los indicadores únicamente por la altura de sus cajas como si midieran lo mismo.
+
+\figuralateral{paneles_indicadores.png}{Distribuciones del umbral de validación y de siete indicadores de prueba en 200 réplicas. Cada panel conserva la escala indicada en la figura.}{fig:paneles}{Fuente: salida original del proyecto. Las frecuencias corresponden a réplicas, no a registros individuales. La línea marca la mediana y la franja el intervalo descriptivo entre percentiles 2,5 y 97,5.}
+\figuralateral{boxplot_indicadores.png}{Diagramas de caja de los indicadores de prueba en 200 réplicas. Se comparan centro, dispersión y observaciones exteriores según la convención del diagrama.}{fig:box}{Fuente: salida original del proyecto. Los bigotes del diagrama no equivalen al intervalo descriptivo entre los percentiles 2,5 y 97,5.}
+
+\section{Comportamiento de los errores por grupo}
+\subsection{Composición, matrices y denominadores}
+El análisis por grupo utiliza el mismo clasificador y el mismo corte global de cada réplica. No se entrenan modelos ni se eligen umbrales específicos por categoría. Para cada $g$ se conservan tamaño $n_g$, positivos reales $n_{1,g}$, negativos reales $n_{0,g}$ y su matriz de confusión. Las tasas se definen por
+\begin{equation}
+\mathrm{TPR}_g=\frac{TP_g}{n_{1,g}},\qquad
+\mathrm{FPR}_g=\frac{FP_g}{n_{0,g}},\qquad
+\mathrm{FNR}_g=\frac{FN_g}{n_{1,g}}.
+\end{equation}
+La prevalencia $n_{1,g}/n_g$ describe la composición observada del grupo. No se interpreta como una tasa de acierto. Los diferentes denominadores hacen imprescindible informar tamaños junto con resultados.
+
+\begin{table}[H]
+\centering
+\caption[Composición y tasas por categoría conjunta en prueba de la réplica 1.]{Composición y tasas por categoría conjunta en prueba de la réplica 1. Prevalencia $n_1/n$; TPR y FNR utilizan $n_1$; FPR utiliza $n_0$.}\label{tab:grupos1}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrrrr}
+\toprule
+Categoría $G$ & $n$ & $n_1$ & $n_0$ & Prevalencia & TPR & FPR & FNR \\
+\midrule
+Female/White & 793 & 98 & 695 & 0,1236 & 0,3367 & 0,0676 & 0,6633 \\
+Female/Black & 133 & 9 & 124 & 0,0677 & 0,3333 & 0,0161 & 0,6667 \\
+Female/Asian-Pac-Islander & 27 & 3 & 24 & 0,1111 & 0,0000 & 0,1667 & 1,0000 \\
+Female/Amer-Indian-Eskimo & 8 & 1 & 7 & 0,1250 & 1,0000 & 0,1429 & 0,0000 \\
+Female/Other & 13 & 2 & 11 & 0,1538 & 0,0000 & 0,0000 & 1,0000 \\
+Male/White & 1649 & 591 & 1058 & 0,3584 & 0,8596 & 0,4121 & 0,1404 \\
+Male/Black & 123 & 31 & 92 & 0,2520 & 0,3871 & 0,1087 & 0,6129 \\
+Male/Asian-Pac-Islander & 59 & 23 & 36 & 0,3898 & 0,7391 & 0,4722 & 0,2609 \\
+Male/Amer-Indian-Eskimo & 15 & 2 & 13 & 0,1333 & 0,5000 & 0,0769 & 0,5000 \\
+Male/Other & 13 & 1 & 12 & 0,0769 & 0,0000 & 0,1667 & 1,0000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{table}[H]
+\centering
+\caption[Matrices por categoría conjunta en prueba de la réplica 1.]{Matrices por categoría conjunta en prueba de la réplica 1. La suma de cada columna coincide con el conteo global correspondiente.}\label{tab:matricesg}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrr}
+\toprule
+Categoría $G$ & TN & FP & FN & TP & Total \\
+\midrule
+Female/White & 648 & 47 & 65 & 33 & 793 \\
+Female/Black & 122 & 2 & 6 & 3 & 133 \\
+Female/Asian-Pac-Islander & 20 & 4 & 3 & 0 & 27 \\
+Female/Amer-Indian-Eskimo & 6 & 1 & 0 & 1 & 8 \\
+Female/Other & 11 & 0 & 2 & 0 & 13 \\
+Male/White & 622 & 436 & 83 & 508 & 1649 \\
+Male/Black & 82 & 10 & 19 & 12 & 123 \\
+Male/Asian-Pac-Islander & 19 & 17 & 6 & 17 & 59 \\
+Male/Amer-Indian-Eskimo & 12 & 1 & 1 & 1 & 15 \\
+Male/Other & 10 & 2 & 1 & 0 & 13 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Los diez grupos particionan la prueba. Al sumar sus matrices se recuperan $TN=1552$, $FP=520$, $FN=186$ y $TP=575$. La TPR global equivale a un promedio de TPR de grupo ponderado por positivos reales; la FPR global se pondera por negativos reales. Un promedio aritmético simple de las diez tasas no reproduce necesariamente el indicador global y puede otorgar a un grupo de tres personas el mismo peso que a uno de miles.
+
+En la réplica 1, una tasa extrema en un grupo con pocos positivos debe leerse con su denominador. Por ejemplo, \archivo{Other} en el marginal racial tiene tres positivos reales y ningún verdadero positivo: su TPR es cero en esa prueba. Ello es un resultado de tres casos, no una estimación precisa de un comportamiento universal.
+
+\subsection{Resultados marginales de la primera réplica}
+Para obtener marginales se suman las matrices de las categorías correspondientes y después se calculan las tasas. No se promedian las tasas conjuntas. Así se mantiene el denominador adecuado.
+
+\begin{table}[H]
+\centering
+\caption[Resultados marginales por sexo registrado en prueba de la réplica 1.]{Resultados marginales por sexo registrado en prueba de la réplica 1. Se suman primero los conteos y luego se calculan las tasas.}\label{tab:sexo}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrrr}
+\toprule
+Categoría & $n$ & $n_1$ & $n_0$ & TPR & FPR & FNR \\
+\midrule
+Female & 974 & 113 & 861 & 0,3274 & 0,0627 & 0,6726 \\
+Male & 1859 & 648 & 1211 & 0,8302 & 0,3848 & 0,1698 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{table}[H]
+\centering
+\caption[Resultados marginales por categoría racial registrada en prueba de la réplica 1.]{Resultados marginales por categoría racial registrada en prueba de la réplica 1. Se suman primero los conteos y luego se calculan las tasas.}\label{tab:raza}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrrr}
+\toprule
+Categoría & $n$ & $n_1$ & $n_0$ & TPR & FPR & FNR \\
+\midrule
+White & 2442 & 689 & 1753 & 0,7852 & 0,2755 & 0,2148 \\
+Black & 256 & 40 & 216 & 0,3750 & 0,0556 & 0,6250 \\
+Asian-Pac-Islander & 86 & 26 & 60 & 0,6538 & 0,3500 & 0,3462 \\
+Amer-Indian-Eskimo & 23 & 3 & 20 & 0,6667 & 0,1000 & 0,3333 \\
+Other & 26 & 3 & 23 & 0,0000 & 0,0870 & 1,0000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+En el marginal de sexo registrado, \archivo{Female} contiene 113 positivos reales, de los cuales 37 fueron detectados: TPR aproximadamente 32,74\%. En \archivo{Male}, se detectaron 538 de 648: aproximadamente 83,02\%. La FPR es aproximadamente 6,27\% para \archivo{Female} y 38,48\% para \archivo{Male}. El patrón combina una mayor detección positiva y una mayor frecuencia de falsas alarmas en el segundo marginal.
+
+Las diferencias no se explican solo por comparar tamaños totales. Intervienen distribuciones distintas de predictores, prevalencias observadas, probabilidades aprendidas y un corte común. Este análisis no identifica cuánto corresponde a cada mecanismo ni permite atribuir causalidad a sexo o raza registrados. La presencia de un atributo en el modelo tampoco constituye por sí sola una prueba causal de discriminación, mientras sus diferencias de error sí justifican una discusión explícita de su uso.
+
+\subsection{Estabilidad y valores no estimables}
+La figura \ref{fig:tasas} resume medianas y extremos percentilares por categoría en las 200 pruebas. Su escala es la de las tasas; los segmentos representan variación descriptiva entre particiones. No son intervalos de confianza de tasas poblacionales. Los resúmenes completos de TPR, FPR y FNR con denominadores se presentan en el anexo.
+
+En \archivo{Female/White}, la TPR mediana es 0,320908 y la FPR mediana 0,077103. En \archivo{Male/White}, son 0,859693 y 0,437830. Estas diferencias muestran que el mismo modelo global puede comportarse de manera muy distinta por categoría: en el segundo grupo detecta una proporción mayor de positivos, pero también marca incorrectamente una proporción mayor de negativos.
+
+Los grupos pequeños tienen tasas más variables. En \archivo{Female/Other}, el denominador positivo mediano es cero y la TPR solo resulta estimable en 93 de las 200 pruebas. En 107 pruebas no hubo positivos reales. Su mediana de TPR igual a cero se calcula sobre los 93 valores definidos, sin convertir las otras 107 observaciones en ceros. En \archivo{Female/Amer-Indian-Eskimo} hay 156 tasas estimables; en \archivo{Male/Other}, 170; en \archivo{Male/Amer-Indian-Eskimo}, 182; y en \archivo{Female/Asian-Pac-Islander}, 198.
+
+En total se identifican 201 combinaciones grupo-réplica sin positivos reales, lo que afecta TPR y FNR. Un rango central de cero a uno en una categoría con pocos casos refleja la fragilidad del denominador. No permite concluir que todos los valores intermedios sean igualmente plausibles ni que el grupo tenga necesariamente peor desempeño poblacional que otro con mayor muestra.
+
+El análisis describe disparidades de error observadas, pero no certifica una condición formal de equidad. Comparar una sola métrica puede ocultar compensaciones: una menor FPR puede coexistir con una mayor FNR. La elección de una política de decisión exigiría objetivos, costos y un contexto de aplicación que exceden este ejercicio.
+
+\figuralateral{tasas_grupos.png}{Tasas de error y detección por categoría conjunta, resumidas en las 200 pruebas. Los puntos y segmentos muestran centro y variación descriptiva de las tasas estimables.}{fig:tasas}{Fuente: salida original del proyecto. TPR y FNR utilizan positivos reales; FPR utiliza negativos reales. Los grupos con denominador cero se excluyen del resumen de la tasa correspondiente y su número estimable se conserva en las tablas.}
+
+\section{Diagnósticos del modelo}
+\subsection{Lectura de los cuatro gráficos Q-Q}
+Los Q-Q de la figura \ref{fig:qq} comparan cuantiles empíricos del entrenamiento de la réplica 1 con cuantiles normales teóricos. Cada panel corresponde a un predictor y una clase. Una alineación aproximadamente recta es compatible con una forma normal; curvaturas, escalones y separaciones en las colas revelan desviaciones. La recta es una referencia gráfica, no un resultado de clasificación ni una prueba automática de normalidad.
+
+En edad de clase 0 se aprecia asimetría y discrepancia de colas: la variable tiene un límite inferior y concentra más observaciones jóvenes, con prolongación hacia edades altas. En clase 1 la zona central es más próxima a una recta, pero las colas tampoco reproducen una normal exacta. La normal asigna masa fuera de los límites observados y no representa de manera exacta una edad registrada en enteros.
+
+En horas semanales se observan acumulaciones y segmentos asociados a valores repetidos, especialmente 40 horas, además de colas y extremos. La forma es menos compatible con una densidad normal continua suave. El entrenamiento 1 contiene 2951 registros de clase 0 con 40 horas, aproximadamente 48,56\%, y 2528 de clase 1, aproximadamente 41,60\%. La normal ajustada reproduce media y dispersión, pero no esa masa puntual.
+
+La no normalidad no implica que el código esté mal calculado. Indica una limitación de la aproximación probabilística. Un clasificador puede conservar capacidad predictiva con supuestos aproximados, pero la evaluación empírica no transforma esos supuestos en hechos ni garantiza calibración de probabilidades.
+
+\figuralateral{qq_replica1.png}{Cuatro gráficos Q-Q normales: edad y horas semanales por clase, exclusivamente en el entrenamiento de la réplica 1.}{fig:qq}{Fuente: salida original del proyecto. Los ejes comparan cuantiles normales teóricos y cuantiles observados del predictor. Se examina forma distributiva, con especial atención a colas, límites y valores repetidos.}
+
+\subsection{Edad frente a horas y dependencia condicional}
+La figura \ref{fig:dispersion} muestra edad frente a horas dentro de cada clase del entrenamiento 1. La acumulación de puntos en horas habituales y las diferencias de dispersión dificultan reducir la estructura a una recta. La superposición visual de puntos tampoco informa de manera exacta cuántas observaciones ocupan cada posición.
+
+\begin{table}[H]
+\centering
+\caption[Diagnósticos descriptivos complementarios calculados desde el entrenamiento guardado de la réplica 1.]{Diagnósticos descriptivos complementarios calculados desde el entrenamiento guardado de la réplica 1. Correlación de Pearson y concentración en 40 horas semanales.}\label{tab:diag}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrr}
+\toprule
+Clase & $n$ & Correlación edad/horas & Horas = 40 & Proporción \\
+\midrule
+0 & 6077 & 0,023888 & 2951 & 0,485601 \\
+1 & 6077 & -0,121750 & 2528 & 0,415995 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+La correlación lineal es cercana a cero en clase 0 y ligeramente negativa en clase 1. Esto sugiere una asociación lineal débil en esa muestra, pero no demuestra independencia condicional. Puede existir una relación no lineal, dependencia de dispersión o relaciones con otros predictores aun con correlación pequeña. Los rangos observados son 17--90 años y 1--99 horas para clase 0, y 21--90 años y 1--99 horas para clase 1.
+
+\figuralateral{edad_horas_replica1.png}{Dispersión de edad y horas semanales por clase en el entrenamiento de la réplica 1. Cada punto corresponde a una observación; las repeticiones pueden superponerse.}{fig:dispersion}{Fuente: salida original del proyecto. La figura se utiliza para examinar dependencia y concentración de predictores dentro de cada clase, no para atribuir efectos causales o medir directamente exactitud.}
+
+\subsection{Educación y categoría conjunta dentro de cada clase}
+La tabla \archivo{educacion_g_replica1.csv} conserva los 160 conteos del cruce educación por $G$ para las dos clases del entrenamiento 1: ocho niveles por diez categorías y por dos clases. La independencia condicional exigiría que la composición educativa fuera aproximadamente la misma entre categorías $G$ dentro de cada clase, no que los conteos absolutos fueran iguales pese a tamaños distintos.
+
+Como apoyo descriptivo se calcularon las proporciones de cuatro niveles educativos por categoría, disponibles en la tabla \ref{tab:propedu}. El denominador de cada fila es el tamaño de su categoría y clase. Así se separan cambios de composición de simples diferencias de tamaño. Los ocho niveles completos permanecen en el CSV de conteos.
+
+Se añadió el índice descriptivo de Cramér a partir de la tabla de contingencia. Para conteos observados $O_{eg}$ y esperados $E_{eg}=O_{e+}O_{+g}/n$, se utiliza
+\begin{equation}
+\chi^2_{\rm desc}=\sum_{e,g:E_{eg}>0}\frac{(O_{eg}-E_{eg})^2}{E_{eg}},\qquad
+V=\sqrt{\frac{\chi^2_{\rm desc}}{n\min(8-1,10-1)}}.
+\end{equation}
+Este cálculo complementario se realizó desde el entrenamiento guardado, mediante el script de auditoría adjunto al informe. No modifica el entrenamiento, el umbral ni las salidas originales del clasificador.
+
+\begin{table}[H]
+\centering
+\caption[Asociación descriptiva educación por G dentro de cada clase del entrenamiento 1.]{Asociación descriptiva educación por G dentro de cada clase del entrenamiento 1. Cada cruce contiene 80 celdas. No se presenta prueba inferencial ni valor p.}\label{tab:cramer}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrr}
+\toprule
+Clase & $n$ & $\chi^2$ descriptivo & $V$ de Cramér & Ceros observados & $E_{eg}<5$ \\
+\midrule
+0 & 6077 & 184,6041 & 0,065876 & 19 & 38 \\
+1 & 6077 & 133,4248 & 0,056005 & 13 & 40 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Los valores $V\approx0,06588$ y $0,05600$ muestran una asociación descriptiva global pequeña según esta escala. No establecen independencia exacta ni descartan diferencias locales. Además, 38 y 40 celdas esperadas son menores que cinco, y hay numerosos ceros observados. Por ello no se presenta una inferencia basada en una aproximación asintótica ni un valor p. Las proporciones de categorías poco frecuentes son especialmente sensibles a pequeños cambios de conteo.
+
+\subsection{Síntesis de los supuestos}
+Los diagnósticos respaldan una interpretación prudente: las aproximaciones normales tienen discrepancias visibles, en particular en horas; edad y horas muestran poca asociación lineal dentro de clase, sin demostrar independencia; educación y $G$ tienen asociación descriptiva global pequeña, junto con celdas escasas. El modelo se interpreta como una regla aproximada evaluada empíricamente. Las verificaciones algebraicas confirman consistencia del cálculo, mientras estos diagnósticos examinan adecuación de supuestos; ambas tareas responden preguntas distintas.
+
+\section{Verificaciones numéricas y trazabilidad}
+\subsection{Controles en las 200 réplicas}
+Se verificó la normalización de previas y probabilidades categóricas, el balance del entrenamiento, la asignación disjunta y completa de destinos, la finitud de puntajes, la reconstrucción de $D$ y la consistencia de matrices. El resumen de controles lógicos se presenta en la tabla \ref{tab:verificaciones}.
+
+\begin{table}[H]
+\centering
+\caption[Verificaciones lógicas de las 200 réplicas guardadas.]{Verificaciones lógicas de las 200 réplicas guardadas. Los errores numéricos se informan por separado en el texto.}\label{tab:verificaciones}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lr}
+\toprule
+Comprobación & Réplicas satisfactorias \\
+\midrule
+\texttt{n\_estrella\_ok} & 200 / 200 \\
+\texttt{destinos\_disjuntos} & 200 / 200 \\
+\texttt{todos\_con\_destino} & 200 / 200 \\
+\texttt{puntajes\_finitos} & 200 / 200 \\
+\texttt{D\_recalculado\_identico} & 200 / 200 \\
+\texttt{contribuciones\_ok} & 200 / 200 \\
+\texttt{matriz\_suma\_n} & 200 / 200 \\
+\texttt{grupos\_suman\_global} & 200 / 200 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+El máximo error absoluto de normalización de las probabilidades de $G$ fue $1,110223\times10^{-16}$; el de previas y de educación fue cero en la representación utilizada. El máximo error absoluto al sumar las contribuciones de $D$ fue $9,103829\times10^{-15}$ y el error relativo máximo registrado fue $4,671891\times10^{-16}$. Las comparaciones respetan las tolerancias escaladas del código, dado que el orden de las operaciones puede cambiar ligeramente los resultados de punto flotante.
+
+Las sumas próximas a uno verifican que las probabilidades categóricas formen distribuciones normalizadas; no demuestran independencia, normalidad, equidad ni buen desempeño. De manera análoga, que las matrices sumen el número de prueba verifica contabilización, pero no elimina falsos positivos o falsos negativos.
+
+\subsection{Identificación de registros y perfiles repetidos}
+El identificador original permite localizar cada fila antes de los filtros. Dentro de una réplica, un mismo identificador no puede estar simultáneamente en entrenamiento y prueba. Sin embargo, dos filas diferentes pueden contener exactamente los mismos valores originales. La auditoría de perfiles compara las 15 columnas fuente, sin el identificador, y conserva las repeticiones conforme al procedimiento solicitado.
+
+Se obtuvieron 28.289 perfiles distintos entre 28.308 filas analíticas. El exceso de multiplicidad es 19, calculado como $\sum_k(m_k-1)$ sobre perfiles repetidos. Esta cantidad no debe interpretarse automáticamente como 19 individuos identificados o como el número total de filas que pertenecen a perfiles repetidos.
+
+En la prueba de la réplica 1, tres filas tienen un perfil idéntico a alguno del entrenamiento y una a alguno de validación; cuatro presentan coincidencia con al menos uno de esos conjuntos. Esto equivale aproximadamente a 0,1412\% de las 2833 filas de prueba. La verificación de identificadores sigue siendo correcta, pero existe una pequeña superposición de perfiles. Se declara porque puede favorecer similitud entre conjuntos aun sin repetir el mismo identificador.
+
+No se eliminaron esos perfiles después de observar la prueba, ya que hacerlo modificaría la población y el procedimiento. Una evaluación alternativa agrupada por perfiles podría estudiarse por separado; no corresponde atribuirle resultados que no se calcularon en este trabajo.
+
+\section{Implementación y reproducibilidad}
+\subsection{Organización del código y artefactos}
+La implementación estadística utiliza GNU R base. Las medias, desviaciones muestrales, log-densidades y percentiles se calculan con expresiones explícitas; funciones de referencia de R aparecen como verificaciones. No se utiliza una biblioteca externa que ajuste automáticamente Naive Bayes. La ejecución principal sigue el orden de los módulos y conserva separados datos, funciones de cálculo, réplicas y resúmenes.
+
+\begin{table}[H]\centering\small
+\caption{Responsabilidad de los módulos principales y evidencia producida.}\label{tab:modulos}
+\begin{tabularx}{\linewidth}{l X}\toprule
+Archivo dentro de \archivo{R/} & Responsabilidad \\\midrule
+\archivo{00_utilidades.R} & Media, desviación y percentil tipo 7 manuales; escritura de CSV con precisión.\\
+\archivo{00_config.R} & Número de réplicas, semillas, épsilon, rutas y niveles fijos.\\
+\archivo{01_datos.R} & Lectura, limpieza, identificador original, filtro y tabla analítica.\\
+\archivo{02_particion.R} & Sorteo por clase, entrenamiento equilibrado y destinos.\\
+\archivo{03_modelo.R} & Ajuste de parámetros, log-densidades y contribuciones del puntaje.\\
+\archivo{04_umbral_metricas.R} & Candidatos, matrices, indicadores, Youden y desempate.\\
+\archivo{05_replicas.R} & Integra partición, ajuste, validación y prueba; guarda cada réplica.\\
+\archivo{06_resumen.R} & Resumen global, histograma de cortes y gráficos de indicadores.\\
+\archivo{07_grupos.R} & Matrices y tasas por grupo, marginales y resúmenes.\\
+\archivo{08_diagnosticos.R} & Q-Q, dispersión, cruce educativo, controles y perfiles.\\
+\archivo{09_replica1.R} & Tablas de detalle, ejemplo individual y curvas de validación.\\\bottomrule
+\end{tabularx}\end{table}
+
+Se conservan 200 archivos \archivo{replica_XXX.rds}, 17 CSV originales de resultados y siete figuras. Cada réplica contiene su semilla, partición, parámetros, selección del umbral, predicciones e indicadores. Los CSV de este informe son copias de las salidas guardadas; los cálculos complementarios se identifican en una carpeta distinta y no reemplazan los resultados originales.
+
+\subsection{Ruta de ejecución y entorno verificado}
+Desde la raíz del repositorio, con los archivos fuente en \archivo{data/raw/}, la ejecución general es:
+\begin{lstlisting}
+Rscript --vanilla run_all.R
+\end{lstlisting}
+Las pruebas existentes se ejecutan por separado, por ejemplo:
+\begin{lstlisting}
+Rscript --vanilla tests/test_09_replica1.R
+\end{lstlisting}
+El proyecto contiene nueve scripts de pruebas. La revisión realizada el 28 de octubre de 2026 obtuvo un resultado satisfactorio en los nueve. Esta revisión utilizó R 4.5.1 en Windows 11. La reproducción exacta también depende de conservar versiones, archivos fuente, tipos de generador aleatorio y semillas. El registro de sesión de la ejecución guardada identifica el generador Mersenne-Twister, la generación normal por inversión y el método de muestreo Rejection.
+
+El 25 de octubre se comprobó una ejecución completa con 200 réplicas, 17 tablas y siete figuras. Se compararon 221 archivos de datos procesados y resultados numéricos antes y después de corregir la lectura UTF-8 de los scripts; permanecieron idénticos byte a byte. La corrección de codificación permitió recuperar acentos y símbolos en las figuras sin alterar fórmulas, población, muestreo o resultados. El 28 de octubre se revisaron los artefactos guardados y se ejecutaron los nueve tests; no se presenta esa revisión como una nueva corrida completa de las 200 réplicas.
+
+\subsection{Integridad de las fuentes}
+Para identificar los archivos originales de esta copia se registran sus sumas SHA-256:
+\begin{quote}\small\ttfamily
+adult.data:\\
+5b00264637dbfec36bdeaab5676b0b309\\
+ff9eb788d63554ca0a249491c86603d\\[4pt]
+adult.names:\\
+c248284c0b5de30c9e1958d6cdd168a34\\
+a654758b620e68f46aefa83fc0a576a
+\end{quote}
+Cada huella anterior se muestra dividida visualmente en dos líneas consecutivas y corresponde a una única cadena hexadecimal. Estas huellas permiten comprobar integridad; no sustituyen el diccionario ni la descripción de los datos. Los datos y salidas se encuentran excluidos del control de versiones según la configuración del repositorio, por lo que una entrega reproducible debe incluirlos o permitir su regeneración desde los originales indicados.
+
+El paquete del informe conserva el código LaTeX, las siete figuras, los 17 CSV originales, los CSV complementarios y el script de auditoría. El análisis estadístico completo se reproduce desde el repositorio; el paquete del informe permite reconstruir el documento a partir de los resultados incluidos.
+
+\section{Discusión y limitaciones}
+\subsection{Balanceo, criterio de decisión y utilidad}
+El balanceo modifica la frecuencia de clases que ve el ajuste: se utilizan previas iguales aunque la clase positiva representa aproximadamente 26,84\% de la tabla. Esta decisión cumple el diseño solicitado y evita que la mayoría domine directamente el entrenamiento, pero cambia la interpretación de las probabilidades internas del modelo. No se declara calibración poblacional de la posterior.
+
+El criterio de Youden asigna igual importancia al reconocimiento de cada clase a través de sus tasas. En una aplicación con costos muy distintos de falsos positivos y negativos, otro objetivo podría resultar apropiado. El presente informe no introduce costos ni umbrales alternativos sin evaluación. Su conclusión se restringe a la regla implementada y a su estabilidad dentro de las réplicas.
+
+La comparación con la clase mayoritaria muestra que la exactitud bruta ofrece una imagen incompleta. Naive Bayes detecta una fracción sustancial de ingresos altos, pero produce numerosas predicciones positivas incorrectas. Por ello no se justifica su uso individual únicamente con BA cercana a 0,74 o sensibilidad cercana a 0,76.
+
+\subsection{Dependencia, normalidad y escasez}
+Las normales de edad y horas son aproximaciones. La concentración en 40 horas y las discrepancias de colas contradicen una lectura literal de normalidad. La factorización puede además contar información redundante si dos bloques están relacionados dentro de clase. Los diagnósticos empleados son parciales y no prueban la independencia conjunta de los cuatro bloques.
+
+Las categorías pequeñas presentan otra limitación: el suavizado mantiene probabilidades positivas, pero no crea observaciones reales. En prueba, una sola clasificación puede cambiar drásticamente una tasa cuando el denominador es uno o dos. Los resúmenes deben leerse junto con $r$ y con el rango de denominadores. Una mediana no elimina esa incertidumbre descriptiva.
+
+\subsection{Validación interna, decisiones previas y generalización}
+La selección del corte se realiza correctamente con validación y se evalúa con la prueba de cada réplica. Sin embargo, todas las particiones proceden de una única tabla histórica. La reutilización de personas limita la interpretación inferencial de la variación entre réplicas. Los resultados no se extrapolan automáticamente a otros países, años o criterios de ingreso.
+
+Los artefactos revisados permiten reconstruir el procedimiento final y sus resultados. No permiten reconstruir exhaustivamente toda decisión exploratoria previa del equipo. Por ello no se afirma que la tabla de prueba haya sido completamente desconocida durante la historia del proyecto ni que exista una evaluación externa sellada. Cualquier análisis previo que haya orientado decisiones debe declararse al presentar el trabajo, de acuerdo con el requerimiento de la rúbrica. Esta limitación documental se distingue de la separación de conjuntos efectivamente implementada dentro de cada réplica.
+
+Las coincidencias de perfiles, la selección educativa y la ausencia de ponderación poblacional refuerzan la necesidad de una interpretación acotada. Los resultados describen el desempeño del procedimiento académico sobre los datos utilizados. Una aplicación real exigiría especificar población objetivo, finalidad, consecuencias de errores, disponibilidad de atributos y validación adicional.
+
+\section{Conclusiones}
+Se implementó y verificó un clasificador Naive Bayes mixto que utiliza edad, horas semanales, educación y una categoría conjunta de sexo y grupo registrado para distinguir dos clases de ingreso. La tabla final contiene 28.308 registros y el procedimiento utiliza 200 réplicas con entrenamiento de 6077 personas por clase, validación para seleccionar el corte y prueba para evaluar la regla fijada.
+
+La mediana de BA fue 0,74184 y la de sensibilidad 0,75821. La detección de la clase positiva mejora respecto de una regla constante de clase 0, pero la mediana de PPV de 0,50634 muestra una proporción considerable de falsas alarmas entre las predicciones positivas. La exactitud media apenas supera la referencia mayoritaria, de modo que el resultado debe explicarse mediante indicadores con denominadores explícitos.
+
+Los errores no se distribuyen de manera uniforme por categoría conjunta. Se observan diferencias importantes de sensibilidad y falsos positivos, junto con tasas muy inestables o no estimables en grupos pequeños. Estas evidencias requieren informar composición y cantidad de valores definidos, evitando atribuir causalidad o precisión poblacional a comparaciones descriptivas.
+
+Los diagnósticos revelan limitaciones de normalidad y no demuestran la independencia condicional completa. Aun así, el procedimiento produce resultados internamente consistentes: las 200 réplicas satisfacen los controles de partición, finitud, reconstrucción y contabilización. La conclusión central es una evaluación reproducible y acotada del clasificador aproximado, con sus compensaciones y restricciones explícitas.
+
+\clearpage
+\begin{thebibliography}{9}
+\addcontentsline{toc}{section}{Referencias}
+\bibitem{rubrica} Universidad Católica de Temuco, Escuela de Ingeniería Informática. (2026). \emph{INFO-1165 Prueba Práctica 2: Clasificación de ingresos mediante Naive Bayes mixto. Enunciado y rúbrica de evaluación}. 21 de octubre de 2026. Documento proporcionado por el curso, 11 páginas.
+\bibitem{capitulo} Material docente del curso. \emph{Capítulo 2}. PDF proporcionado para el estudio de probabilidad y clasificación. Se utiliza como apoyo conceptual; las decisiones específicas del proyecto se rigen por el enunciado de la prueba.
+\bibitem{uci} Becker, B., y Kohavi, R. (1996). \emph{Adult}. UCI Machine Learning Repository. \url{https://doi.org/10.24432/C5XW20}. Ficha y archivos: \url{https://archive.ics.uci.edu/dataset/2/adult}.
+\bibitem{nb} Scikit-learn. \emph{Naive Bayes}. Documentación conceptual de los componentes gaussianos y categóricos. \url{https://scikit-learn.org/stable/modules/naive_bayes.html}. No se empleó la biblioteca para ajustar el modelo.
+\bibitem{quantile} R Core Team. \emph{Sample Quantiles}, documentación de \archivo{stats::quantile}. Definición de los cuantiles tipo 7. \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/quantile.html}.
+\bibitem{codigo} Equipo del proyecto. \emph{INFO1165-clasificacion-ingresos}. Código y artefactos locales revisados al 28 de octubre de 2026. Repositorio de referencia: \url{https://github.com/diegoa18/INFO1165-clasificacion-ingresos}. Las tablas y figuras de este informe proceden de la copia local descrita en reproducibilidad.
+\end{thebibliography}
+
+\clearpage\appendix
+\section{Probabilidades categóricas del entrenamiento 1}
+Las tablas de este anexo permiten reconstruir cada probabilidad categórica a partir de su conteo. Se aplica un suavizado de uno y se utilizan todos los niveles fijados, aun cuando un conteo sea cero. Las probabilidades de cada columna de clase suman uno dentro de su variable.
+
+\begin{table}[H]
+\centering
+\caption[Conteos y probabilidades suavizadas de G en entrenamiento de la réplica 1.]{Conteos y probabilidades suavizadas de G en entrenamiento de la réplica 1. Cada clase contiene 6077 personas; el denominador suavizado es 6087.}\label{tab:pg}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrr}
+\toprule
+Categoría & $n_{0,g}$ & $\widehat p_{0,g}$ & $n_{1,g}$ & $\widehat p_{1,g}$ \\
+\midrule
+Female/White & 1963 & 0,322655 & 822 & 0,135206 \\
+Female/Black & 353 & 0,058157 & 72 & 0,011993 \\
+Female/Asian-Pac-Islander & 82 & 0,013636 & 33 & 0,005586 \\
+Female/Amer-Indian-Eskimo & 24 & 0,004107 & 8 & 0,001479 \\
+Female/Other & 17 & 0,002957 & 4 & 0,000821 \\
+Male/White & 3151 & 0,517825 & 4701 & 0,772466 \\
+Male/Black & 309 & 0,050928 & 217 & 0,035814 \\
+Male/Asian-Pac-Islander & 126 & 0,020864 & 188 & 0,031050 \\
+Male/Amer-Indian-Eskimo & 32 & 0,005421 & 18 & 0,003121 \\
+Male/Other & 20 & 0,003450 & 14 & 0,002464 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{table}[H]
+\centering
+\caption[Conteos y probabilidades suavizadas de educación en entrenamiento de la réplica 1.]{Conteos y probabilidades suavizadas de educación en entrenamiento de la réplica 1. Cada clase contiene 6077 personas; el denominador suavizado es 6085.}\label{tab:qe}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrr}
+\toprule
+Categoría & $m_{0,e}$ & $\widehat q_{0,e}$ & $m_{1,e}$ & $\widehat q_{1,e}$ \\
+\midrule
+HS-grad & 2519 & 0,414133 & 1349 & 0,221857 \\
+Some-college & 1776 & 0,292030 & 1107 & 0,182087 \\
+Assoc-voc & 293 & 0,048316 & 287 & 0,047329 \\
+Assoc-acdm & 234 & 0,038620 & 211 & 0,034840 \\
+Bachelors & 949 & 0,156122 & 1778 & 0,292358 \\
+Masters & 235 & 0,038784 & 772 & 0,127034 \\
+Prof-school & 43 & 0,007231 & 336 & 0,055382 \\
+Doctorate & 28 & 0,004766 & 237 & 0,039113 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\clearpage
+\section{Resúmenes completos de tasas por grupo}
+Las tablas siguientes acompañan la figura de tasas. La mínima, mediana y máxima del denominador se calculan sobre las 200 pruebas; $r$ informa cuántas tasas pudieron calcularse. En particular, una mediana de denominador igual a cero no impide que existan réplicas con denominador positivo, cuyos valores conforman el resumen de tasas.
+
+\begin{table}[H]
+\centering
+\caption[Resumen de TPR por categoría en las 200 pruebas.]{Resumen de TPR por categoría en las 200 pruebas. $d$ es $n_1$ (positivos reales). Los extremos y la mediana de $d$ consideran las 200 pruebas; los estadísticos de la tasa solo sus $r$ valores estimables.}\label{tab:resumenTPR}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrrrr}
+\toprule
+Categoría $G$ & $d_{\min}$ & $d_{\rm med}$ & $d_{\max}$ & $r$ & Mediana & $P_{2,5}$ & $P_{97,5}$ \\
+\midrule
+Female/White & 82 & 102,0 & 124 & 200 & 0,3209 & 0,2306 & 0,4102 \\
+Female/Black & 2 & 8,0 & 16 & 200 & 0,1250 & 0,0000 & 0,4458 \\
+Female/Asian-Pac-Islander & 0 & 4,0 & 9 & 198 & 0,2679 & 0,0000 & 1,0000 \\
+Female/Amer-Indian-Eskimo & 0 & 1,0 & 4 & 156 & 0,5000 & 0,0000 & 1,0000 \\
+Female/Other & 0 & 0,0 & 3 & 93 & 0,0000 & 0,0000 & 1,0000 \\
+Male/White & 558 & 590,0 & 618 & 200 & 0,8597 & 0,7937 & 0,9233 \\
+Male/Black & 15 & 27,0 & 40 & 200 & 0,4742 & 0,2752 & 0,6676 \\
+Male/Asian-Pac-Islander & 14 & 23,0 & 35 & 200 & 0,8929 & 0,7220 & 1,0000 \\
+Male/Amer-Indian-Eskimo & 0 & 2,0 & 7 & 182 & 0,2500 & 0,0000 & 1,0000 \\
+Male/Other & 0 & 1,0 & 6 & 170 & 0,5000 & 0,0000 & 1,0000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{table}[H]
+\centering
+\caption[Resumen de FPR por categoría en las 200 pruebas.]{Resumen de FPR por categoría en las 200 pruebas. $d$ es $n_0$ (negativos reales). Los extremos y la mediana de $d$ consideran las 200 pruebas; los estadísticos de la tasa solo sus $r$ valores estimables.}\label{tab:resumenFPR}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrrrr}
+\toprule
+Categoría $G$ & $d_{\min}$ & $d_{\rm med}$ & $d_{\max}$ & $r$ & Mediana & $P_{2,5}$ & $P_{97,5}$ \\
+\midrule
+Female/White & 610 & 665,0 & 718 & 200 & 0,0771 & 0,0545 & 0,1138 \\
+Female/Black & 93 & 120,0 & 147 & 200 & 0,0078 & 0,0000 & 0,0200 \\
+Female/Asian-Pac-Islander & 15 & 27,0 & 39 & 200 & 0,1225 & 0,0000 & 0,2500 \\
+Female/Amer-Indian-Eskimo & 3 & 9,0 & 17 & 200 & 0,0000 & 0,0000 & 0,2000 \\
+Female/Other & 1 & 7,0 & 14 & 200 & 0,0000 & 0,0000 & 0,1429 \\
+Male/White & 1008 & 1078,0 & 1133 & 200 & 0,4378 & 0,3671 & 0,5609 \\
+Male/Black & 79 & 101,0 & 122 & 200 & 0,1208 & 0,0613 & 0,2041 \\
+Male/Asian-Pac-Islander & 28 & 42,0 & 64 & 200 & 0,4743 & 0,2998 & 0,6226 \\
+Male/Amer-Indian-Eskimo & 5 & 12,0 & 21 & 200 & 0,0607 & 0,0000 & 0,2000 \\
+Male/Other & 2 & 9,0 & 17 & 200 & 0,0833 & 0,0000 & 0,3333 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{table}[H]
+\centering
+\caption[Resumen de FNR por categoría en las 200 pruebas.]{Resumen de FNR por categoría en las 200 pruebas. $d$ es $n_1$ (positivos reales). Los extremos y la mediana de $d$ consideran las 200 pruebas; los estadísticos de la tasa solo sus $r$ valores estimables.}\label{tab:resumenFNR}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrrrr}
+\toprule
+Categoría $G$ & $d_{\min}$ & $d_{\rm med}$ & $d_{\max}$ & $r$ & Mediana & $P_{2,5}$ & $P_{97,5}$ \\
+\midrule
+Female/White & 82 & 102,0 & 124 & 200 & 0,6791 & 0,5898 & 0,7694 \\
+Female/Black & 2 & 8,0 & 16 & 200 & 0,8750 & 0,5542 & 1,0000 \\
+Female/Asian-Pac-Islander & 0 & 4,0 & 9 & 198 & 0,7321 & 0,0000 & 1,0000 \\
+Female/Amer-Indian-Eskimo & 0 & 1,0 & 4 & 156 & 0,5000 & 0,0000 & 1,0000 \\
+Female/Other & 0 & 0,0 & 3 & 93 & 1,0000 & 0,0000 & 1,0000 \\
+Male/White & 558 & 590,0 & 618 & 200 & 0,1403 & 0,0767 & 0,2063 \\
+Male/Black & 15 & 27,0 & 40 & 200 & 0,5258 & 0,3324 & 0,7248 \\
+Male/Asian-Pac-Islander & 14 & 23,0 & 35 & 200 & 0,1071 & 0,0000 & 0,2780 \\
+Male/Amer-Indian-Eskimo & 0 & 2,0 & 7 & 182 & 0,7500 & 0,0000 & 1,0000 \\
+Male/Other & 0 & 1,0 & 6 & 170 & 0,5000 & 0,0000 & 1,0000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\clearpage
+\section{Composición educativa complementaria}
+Las proporciones seleccionadas muestran cómo comparar composición educativa entre categorías sin confundir tamaño con distribución. Se incluyen cuatro niveles por legibilidad. Los otros cuatro niveles admitidos permanecen en la tabla completa de conteos, incluida en el paquete del informe. La comparación se realiza dentro de cada clase.
+
+\begin{table}[H]
+\centering
+\caption[Cuatro proporciones educativas seleccionadas por categoría conjunta y clase, en entrenamiento de la réplica 1.]{Cuatro proporciones educativas seleccionadas por categoría conjunta y clase, en entrenamiento de la réplica 1. El denominador es $n_g$ de la misma fila. Se omiten cuatro niveles de la visualización; por ello las filas no suman uno.}\label{tab:propedu}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrrr}
+\toprule
+Clase & Categoría $G$ & $n_g$ & HS-grad & Bachelors & Masters & Doctorate \\
+\midrule
+0 & Female/White & 1963 & 0,354 & 0,165 & 0,047 & 0,004 \\
+0 & Female/Black & 353 & 0,473 & 0,130 & 0,020 & 0,000 \\
+0 & Female/Asian-Pac-Islander & 82 & 0,305 & 0,329 & 0,073 & 0,000 \\
+0 & Female/Amer-Indian-Eskimo & 24 & 0,125 & 0,083 & 0,000 & 0,000 \\
+0 & Female/Other & 17 & 0,412 & 0,118 & 0,000 & 0,000 \\
+0 & Male/White & 3151 & 0,444 & 0,153 & 0,033 & 0,006 \\
+0 & Male/Black & 309 & 0,524 & 0,084 & 0,036 & 0,000 \\
+0 & Male/Asian-Pac-Islander & 126 & 0,294 & 0,262 & 0,103 & 0,008 \\
+0 & Male/Amer-Indian-Eskimo & 32 & 0,531 & 0,094 & 0,000 & 0,000 \\
+0 & Male/Other & 20 & 0,450 & 0,300 & 0,000 & 0,000 \\
+1 & Female/White & 822 & 0,197 & 0,286 & 0,150 & 0,047 \\
+1 & Female/Black & 72 & 0,125 & 0,319 & 0,167 & 0,042 \\
+1 & Female/Asian-Pac-Islander & 33 & 0,091 & 0,485 & 0,152 & 0,000 \\
+1 & Female/Amer-Indian-Eskimo & 8 & 0,250 & 0,125 & 0,125 & 0,000 \\
+1 & Female/Other & 4 & 0,000 & 0,500 & 0,250 & 0,000 \\
+1 & Male/White & 4701 & 0,230 & 0,291 & 0,122 & 0,038 \\
+1 & Male/Black & 217 & 0,281 & 0,263 & 0,092 & 0,014 \\
+1 & Male/Asian-Pac-Islander & 188 & 0,128 & 0,362 & 0,176 & 0,074 \\
+1 & Male/Amer-Indian-Eskimo & 18 & 0,389 & 0,278 & 0,056 & 0,056 \\
+1 & Male/Other & 14 & 0,143 & 0,143 & 0,071 & 0,000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\clearpage
+\section{Localización de cálculos y evidencias}
+Este anexo permite relacionar una afirmación del informe con su implementación y con el artefacto que la respalda. Los números de línea se refieren a la copia revisada y pueden cambiar si se edita el código; los nombres de archivo y función permiten mantener la localización conceptual.
+
+\small
+\begin{longtable}{>{\raggedright\arraybackslash}p{.26\linewidth}>{\raggedright\arraybackslash}p{.35\linewidth}>{\raggedright\arraybackslash}p{.31\linewidth}}
+\caption{Correspondencia entre cálculos, código y resultados verificables.}\label{tab:evidencias}\\
+\toprule Cálculo & Código de referencia & Evidencia guardada\\\midrule\endfirsthead
+\toprule Cálculo & Código de referencia & Evidencia guardada\\\midrule\endhead
+\bottomrule\endfoot
+Filtro, población y clase & \archivo{R/01_datos.R}, lectura desde línea 10; filtro y clase, líneas 29--36. & \archivo{data/processed/}: tabla analítica y registro de exclusiones.\\
+Semillas, niveles y épsilon & \archivo{R/00_config.R}, líneas 15--23 y 49--67. & \archivo{logs/semillas.csv}, configuración y réplica guardada.\\
+Entrenamiento equilibrado & \archivo{R/02_particion.R}, partición desde línea 10; $n^*$ y selección, líneas 30--33. & \archivo{tamanos_replica1.csv}; índices y destinos de cada RDS.\\
+Media, desviación y percentiles & \archivo{R/00_utilidades.R}, funciones desde líneas 7, 13 y 20. & Parámetros, resúmenes y tests de utilidades.\\
+Normal y categorías & \archivo{R/03_modelo.R}, log-densidad desde línea 10; ajuste desde 16; Laplace en 48--49. & \archivo{parametros_replica1.csv}; probabilidades de G y educación.\\
+Puntaje y contribuciones & \archivo{R/03_modelo.R}, puntuación desde línea 59; diferencia de clases en línea 92. & \archivo{persona_replica1.csv}; puntajes de validación y prueba por RDS.\\
+Candidatos y selección & \archivo{R/04_umbral_metricas.R}, candidatos desde 12 y selector desde 60; desempate, 68--72. & \archivo{candidatos_replica1.csv}; componente de umbral en cada RDS.\\
+Predicción e indicadores & \archivo{R/04_umbral_metricas.R}, predicción desde 24; matriz desde 28; indicadores desde 40. & \archivo{replicas_indicadores.csv}; matrices e indicadores por RDS.\\
+Orden sin fuga entre fases & \archivo{R/05_replicas.R}, partición 25, ajuste 30, corte 31, predicción 34 y guardado 51. & Archivos \archivo{replica_001.rds} a \archivo{replica_200.rds}.\\
+Variación global & \archivo{R/06_resumen.R}, resumen desde 25 y gráficos desde 46. & \archivo{resumen_replicas.csv}; histograma, paneles y cajas.\\
+Errores por grupo & \archivo{R/07_grupos.R}, tasas desde 16; resúmenes desde 34; marginales desde 67. & \archivo{grupos_replicas.csv}, \archivo{resumen_grupos.csv}, marginales y figura.\\
+Q-Q y dependencia & \archivo{R/08_diagnosticos.R}, Q-Q 30--35; dispersión desde 48; cruce educativo 71. & Q-Q, edad/horas y \archivo{educacion_g_replica1.csv}.\\
+Controles y duplicados & \archivo{R/08_diagnosticos.R}, controles desde 81; perfiles desde 119. & \archivo{verificaciones_replicas.csv}; \archivo{trazabilidad.csv}.\\
+Ejemplo y curvas & \archivo{R/09_replica1.R}, persona desde 57, densidad 70--72, curvas desde 93. & \archivo{persona_replica1.csv}; densidad de ejemplo y curvas de validación.\\
+Diagnósticos añadidos al informe & \archivo{scripts/auditar_informe.R} del paquete del informe. & \archivo{datos/complementarios/}: correlación, Cramér, referencia y auditoría.\\
+\end{longtable}
+\normalsize
+
+\subsection{Relación entre interpretación y comprobación}
+Una explicación completa permite localizar tanto la fórmula como la realización numérica. Por ejemplo, la definición de Laplace se comprueba en el ajuste y después en el CSV de conteos y probabilidades; la afirmación sobre falsos negativos se comprueba en la matriz y en la comparación entre etiqueta y predicción; la no estimabilidad de una tasa se comprueba en su denominador y en el valor $r$ del resumen.
+
+Las figuras se generan a partir de estos artefactos. Su interpretación no reemplaza la tabla de origen cuando se requiere un valor preciso. Las diferencias entre conjuntos también deben mantenerse al citar una cifra: $J_{\max}$ de validación corresponde a selección, mientras el $J$ de prueba corresponde a evaluación; ambos pertenecen a una réplica concreta y no son el mismo resumen que la mediana de las 200 pruebas.
+
+\subsection{Material incluido y límites de la entrega documental}
+El informe reúne problema, fundamentos, fórmulas, metodología, resultados, interpretación de las siete figuras, grupos, diagnósticos, controles y localización en código. El archivo fuente permite editar la redacción o la portada y volver a compilar. Las cifras se muestran redondeadas para lectura; los CSV incluidos conservan la precisión guardada por el proyecto.
+
+La documentación no sustituye la revisión individual del código ni la exposición oral solicitada. La coherencia del cálculo está respaldada por los controles descritos; la comprensión y explicación de cada decisión corresponde a la defensa del trabajo. Las conclusiones se limitan a los resultados presentados y no atribuyen al modelo pruebas, validaciones o capacidades que no fueron realizadas.
+
+\end{document}

@@ -1,0 +1,5 @@
+# Conservar los bytes de las evidencias y sus huellas SHA-256 al clonar.
+* -text
+* whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+*.pdf binary
+*.png binary

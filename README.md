@@ -19,3 +19,10 @@ source("run_all.R")
 - `output/replicas/`: un `.rds` por replica; `output/tablas/`: csv; `output/figuras/`: png.
 - `logs/`: entorno, RNGkind, semillas, eps.
 - `docs/`: documentacion y rubrica.
+
+## Informe de resultados
+
+El informe se encuentra en [`docs/informe/`](docs/informe/README.md):
+
+- [Informe en PDF](docs/informe/Informe_INFO1165_Naive_Bayes_Mixto.pdf).
+- [Fuente LaTeX](docs/informe/main.tex), con las imagenes y archivos de apoyo necesarios para compilarlo.
